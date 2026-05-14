@@ -114,7 +114,13 @@ public class SettingsMonitorService extends Service {
         if (globalObserver != null) getContentResolver().unregisterContentObserver(globalObserver);
         if (shizukuListener != null) {
             try {
-                Shizuku.removeBinderReceivedListener(shizukuListener);
+                Shizuku.class.getMethod("removeBinderReceivedListener", Shizuku.OnBinderReceivedListener.class).invoke(null, shizukuListener);
+            } catch (NoSuchMethodException e) {
+                try {
+                    Shizuku.class.getMethod("removeBinderReceivedListenerItem", Shizuku.OnBinderReceivedListener.class).invoke(null, shizukuListener);
+                } catch (Throwable th) {
+                    Log.w(TAG, "Failed to unregister Shizuku listener via fallback, it may be removed automatically");
+                }
             } catch (Throwable t) {
                 Log.e(TAG, "Failed to unregister Shizuku listener", t);
             }

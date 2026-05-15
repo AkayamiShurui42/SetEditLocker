@@ -33,10 +33,10 @@ public final class SettingsUtils {
                                       @NonNull String keyName) {
         if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
-                // Try using shizuku binary directly first (works on most setups)
+                // Try executing the settings command via Shizuku's privileged shell
                 Shell.Result result = Shell.cmd("shizuku -c 'settings delete " + settingsType + " " + keyName + "'").exec();
                 if (!result.isSuccess()) {
-                    // Fallback to app_process hack
+                    // Fallback to app_process method
                     result = Shell.cmd("app_process -Djava.class.path=/data/local/tmp/shizuku/shizuku.apk /system/bin com.android.commands.settings.Settings delete " + settingsType + " " + keyName).exec();
                 }
                 return new ActionResult(ActionResult.TYPE_DELETE, result.isSuccess());
@@ -86,10 +86,10 @@ public final class SettingsUtils {
         }
         if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
-                // Try using shizuku binary directly first
+                // Try executing the settings command via Shizuku's privileged shell
                 Shell.Result result = Shell.cmd("shizuku -c 'settings put " + settingsType + " " + keyName + " \"" + newValue + "\"'").exec();
                 if (!result.isSuccess()) {
-                    // Fallback to app_process hack
+                    // Fallback to app_process method
                     result = Shell.cmd("app_process -Djava.class.path=/data/local/tmp/shizuku/shizuku.apk /system/bin com.android.commands.settings.Settings put " + settingsType + " " + keyName + " \"" + newValue + "\"").exec();
                 }
                 return new ActionResult(actionType, result.isSuccess());

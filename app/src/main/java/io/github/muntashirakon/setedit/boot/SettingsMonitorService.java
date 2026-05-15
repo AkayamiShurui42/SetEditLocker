@@ -104,6 +104,7 @@ public class SettingsMonitorService extends Service {
             String key = fullKey.substring(0, lastColon);
             String tableType = fullKey.substring(lastColon + 1);
             String settingsType = null;
+            String finalSavedValue = String.valueOf(entry.getValue());
 
             if (TableType.TABLE_SYSTEM.equals(tableType)) {
                 settingsType = SettingsType.SYSTEM_SETTINGS;
@@ -111,10 +112,12 @@ public class SettingsMonitorService extends Service {
                 settingsType = SettingsType.SECURE_SETTINGS;
             } else if (TableType.TABLE_GLOBAL.equals(tableType)) {
                 settingsType = SettingsType.GLOBAL_SETTINGS;
-            }
-
             } else if (TableType.TABLE_PROPERTIES.equals(tableType)) {
                 checkAndRevertProperty(key, finalSavedValue);
+            }
+
+            if (settingsType != null) {
+                checkAndRevertSetting(key, settingsType, tableType);
             }
         }
     }

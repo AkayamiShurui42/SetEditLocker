@@ -13,12 +13,15 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+
+import com.topjohnwu.superuser.Shell;
 
 import java.util.Map;
 
@@ -45,7 +48,9 @@ public class SettingsMonitorService extends Service {
         @Override
         public void run() {
             applyAllLockedSettings();
-            handler.postDelayed(this, 30000); // Check every 30 seconds
+            if (handler != null) {
+                handler.postDelayed(this, 30000); // Check every 30 seconds
+            }
         }
     };
 
@@ -131,6 +136,8 @@ public class SettingsMonitorService extends Service {
                 ActionResult updateResult = AndroidPropertyUtils.update(key, savedValue);
                 if (!updateResult.successful) {
                     Log.e(TAG, "Failed to revert locked property " + key + ": " + updateResult.getLogs());
+                } else {
+                    Log.i(TAG, "Successfully reverted locked property: " + key);
                 }
             }
         }).start();
@@ -144,7 +151,9 @@ public class SettingsMonitorService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        handler.removeCallbacks(periodicCheck);
+        if (handler != null) {
+            handler.removeCallbacks(periodicCheck);
+        }
         if (systemObserver != null) getContentResolver().unregisterContentObserver(systemObserver);
         if (secureObserver != null) getContentResolver().unregisterContentObserver(secureObserver);
         if (globalObserver != null) getContentResolver().unregisterContentObserver(globalObserver);

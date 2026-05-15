@@ -27,6 +27,8 @@ import io.github.muntashirakon.setedit.EditorUtils;
 import io.github.muntashirakon.setedit.R;
 import io.github.muntashirakon.setedit.SettingsType;
 import io.github.muntashirakon.setedit.TableType;
+import io.github.muntashirakon.setedit.utils.AndroidPropertyUtils;
+import io.github.muntashirakon.setedit.utils.ActionResult;
 import io.github.muntashirakon.setedit.utils.SettingsUtils;
 import rikka.shizuku.Shizuku;
 
@@ -39,6 +41,13 @@ public class SettingsMonitorService extends Service {
     private SettingsObserver secureObserver;
     private SettingsObserver globalObserver;
     private Shizuku.OnBinderReceivedListener shizukuListener;
+    private final Runnable periodicCheck = new Runnable() {
+        @Override
+        public void run() {
+            applyAllLockedSettings();
+            handler.postDelayed(this, 30000); // Check every 30 seconds
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -67,6 +76,7 @@ public class SettingsMonitorService extends Service {
         getContentResolver().registerContentObserver(Settings.Global.CONTENT_URI, true, globalObserver);
 
         applyAllLockedSettings();
+        handler.postDelayed(periodicCheck, 30000);
 
         shizukuListener = new Shizuku.OnBinderReceivedListener() {
             @Override
@@ -103,10 +113,24 @@ public class SettingsMonitorService extends Service {
                 settingsType = SettingsType.GLOBAL_SETTINGS;
             }
 
-            if (settingsType != null) {
-                checkAndRevertSetting(key, settingsType, tableType);
+            } else if (TableType.TABLE_PROPERTIES.equals(tableType)) {
+                checkAndRevertProperty(key, finalSavedValue);
             }
         }
+    }
+
+    private void checkAndRevertProperty(String key, String savedValue) {
+        new Thread(() -> {
+            Shell.Result result = Shell.cmd("getprop " + key).exec();
+            String currentValue = TextUtils.join("", result.getOut()).trim();
+            if (!savedValue.equals(currentValue)) {
+                Log.i(TAG, "Locked property changed: " + key + ". Reverting to " + savedValue + " (Current: " + currentValue + ")");
+                ActionResult updateResult = AndroidPropertyUtils.update(key, savedValue);
+                if (!updateResult.successful) {
+                    Log.e(TAG, "Failed to revert locked property " + key + ": " + updateResult.getLogs());
+                }
+            }
+        }).start();
     }
 
     @Override
@@ -117,6 +141,7 @@ public class SettingsMonitorService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacks(periodicCheck);
         if (systemObserver != null) getContentResolver().unregisterContentObserver(systemObserver);
         if (secureObserver != null) getContentResolver().unregisterContentObserver(secureObserver);
         if (globalObserver != null) getContentResolver().unregisterContentObserver(globalObserver);

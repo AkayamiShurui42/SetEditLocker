@@ -55,13 +55,18 @@ public final class SettingsUtils {
             r.setLogs(TextUtils.join("\n", result.getErr()));
             return r;
         }
-        Boolean isGranted = EditorUtils.checkSettingsPermission(context, settingsType);
-        if (isGranted == null) return new ActionResult(ActionResult.TYPE_DELETE, false);
+        if (isGranted == null) {
+            ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
+            r.setLogs("Shizuku is running but permission is not granted. A request has been sent.");
+            return r;
+        }
         if (!isGranted) {
             if (context instanceof android.app.Activity) {
                 EditorUtils.displayGrantPermissionMessage(context);
             }
-            return new ActionResult(ActionResult.TYPE_DELETE, false);
+            ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
+            r.setLogs("Permission WRITE_SECURE_SETTINGS is missing. Please grant it via ADB or Root.");
+            return r;
         }
         ContentResolver contentResolver = context.getContentResolver();
         try {
@@ -113,13 +118,18 @@ public final class SettingsUtils {
             r.setLogs(TextUtils.join("\n", result.getErr()));
             return r;
         }
-        Boolean isGranted = EditorUtils.checkSettingsPermission(context, settingsType);
-        if (isGranted == null) return new ActionResult(actionType, false);
+        if (isGranted == null) {
+            ActionResult r = new ActionResult(actionType, false);
+            r.setLogs("Shizuku is running but permission is not granted. A request has been sent.");
+            return r;
+        }
         if (!isGranted) {
             if (context instanceof android.app.Activity) {
                 EditorUtils.displayGrantPermissionMessage(context);
             }
-            return new ActionResult(actionType, false);
+            ActionResult r = new ActionResult(actionType, false);
+            r.setLogs("Permission WRITE_SECURE_SETTINGS is missing. Please grant it via ADB or Root.");
+            return r;
         }
         ContentResolver contentResolver = context.getContentResolver();
         try {

@@ -29,6 +29,8 @@ import rikka.shizuku.Shizuku;
 import java.util.List;
 
 public class EditorUtils {
+    public static final int REQUEST_CODE_SHIZUKU = 1001;
+
     /**
      * Check whether the permission has been granted
      *

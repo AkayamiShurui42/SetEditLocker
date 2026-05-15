@@ -1,3 +1,5 @@
+package io.github.muntashirakon.setedit.boot;
+
 import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
@@ -11,12 +13,15 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationChannelCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+
+import com.topjohnwu.superuser.Shell;
 
 import java.util.Map;
 

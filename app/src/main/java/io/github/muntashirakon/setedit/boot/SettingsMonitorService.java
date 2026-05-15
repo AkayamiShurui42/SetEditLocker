@@ -60,6 +60,8 @@ public class SettingsMonitorService extends Service {
         getContentResolver().registerContentObserver(Settings.Secure.CONTENT_URI, true, secureObserver);
         getContentResolver().registerContentObserver(Settings.Global.CONTENT_URI, true, globalObserver);
 
+        applyAllLockedSettings();
+
         shizukuListener = new Shizuku.OnBinderReceivedListener() {
             @Override
             public void onBinderReceived() {
@@ -78,13 +80,13 @@ public class SettingsMonitorService extends Service {
         Map<String, ?> allEntries = lockedPrefs.getAll();
         for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
             String fullKey = entry.getKey();
-            if (fullKey == null || !fullKey.contains(":")) continue;
+            if (fullKey == null) continue;
 
-            String[] parts = fullKey.split(":");
-            if (parts.length != 2) continue;
+            int lastColon = fullKey.lastIndexOf(':');
+            if (lastColon <= 0 || lastColon == fullKey.length() - 1) continue;
 
-            String key = parts[0];
-            String tableType = parts[1];
+            String key = fullKey.substring(0, lastColon);
+            String tableType = fullKey.substring(lastColon + 1);
             String settingsType = null;
 
             if (TableType.TABLE_SYSTEM.equals(tableType)) {
@@ -160,8 +162,15 @@ public class SettingsMonitorService extends Service {
 
     private void checkAndRevertSetting(String key, String settingsType, String tableType) {
         SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
-        String savedValue = lockedPrefs.getString(key + ":" + tableType, null);
+        String savedValue = null;
+        try {
+            savedValue = lockedPrefs.getString(key + ":" + tableType, null);
+        } catch (ClassCastException e) {
+            Log.e(TAG, "Failed to read locked setting value", e);
+        }
+
         if (savedValue != null) {
+            final String finalSavedValue = savedValue;
             String currentValue = null;
             try {
                 if (SettingsType.SYSTEM_SETTINGS.equals(settingsType)) {
@@ -176,10 +185,12 @@ public class SettingsMonitorService extends Service {
             }
 
             // Only revert if changed
-            if (currentValue == null || !currentValue.equals(savedValue)) {
-                Log.i(TAG, "Locked setting changed: " + key + ". Reverting to " + savedValue);
+            if (currentValue == null || !currentValue.equals(finalSavedValue)) {
+                Log.i(TAG, "Locked setting changed: " + key + ". Reverting to " + finalSavedValue);
                 handler.postDelayed(() -> {
-                    SettingsUtils.update(SettingsMonitorService.this, settingsType, key, savedValue);
+                    new Thread(() -> {
+                        SettingsUtils.update(SettingsMonitorService.this, settingsType, key, finalSavedValue);
+                    }).start();
                 }, 500); // 0.5s delay to make sure system finishes its update first
             }
         }

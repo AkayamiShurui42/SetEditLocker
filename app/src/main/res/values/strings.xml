@@ -42,4 +42,6 @@
     <string name="delete_shortcut_title">Delete shortcut</string>
     <string name="delete_shortcut_message">SetEdit cannot delete a shortcut automatically. To delete the shortcut, you must remove it from the launcher where it was originally added.</string>
     <string name="drag_item">Drag item</string>
+    <string name="boot_actions_failed">Boot actions failed</string>
+    <string name="boot_actions_failed_msg">Tap to see logs</string>
 </resources>

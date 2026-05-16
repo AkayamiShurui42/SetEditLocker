@@ -71,7 +71,11 @@ public class EditorUtils {
         } else if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
             Shell.cmd("pm grant " + BuildConfig.APPLICATION_ID + " " + permission).exec();
         } else if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            Shell.cmd("pm grant " + BuildConfig.APPLICATION_ID + " " + permission).exec();
+            try {
+                Shizuku.newProcess(new String[]{"pm", "grant", BuildConfig.APPLICATION_ID, permission}, null, null).waitFor();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
             return true;

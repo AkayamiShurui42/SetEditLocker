@@ -17,6 +17,50 @@ import rikka.shizuku.Shizuku;
 
 public final class SettingsUtils {
     @NonNull
+    private static ActionResult runPrivileged(@ActionResult.ActionType int actionType, String cmd, String... args) {
+        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try {
+                String[] fullCmd = new String[args.length + 1];
+                fullCmd[0] = cmd;
+                System.arraycopy(args, 0, fullCmd, 1, args.length);
+                rikka.shizuku.ShizukuRemoteProcess process = Shizuku.newProcess(fullCmd, null, null);
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    return new ActionResult(actionType, true);
+                } else {
+                    ActionResult r = new ActionResult(actionType, false);
+                    java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getErrorStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    r.setLogs(sb.toString().trim());
+                    return r;
+                }
+            } catch (Exception e) {
+                ActionResult r = new ActionResult(actionType, false);
+                r.setLogs(e.getMessage());
+                return r;
+            }
+        } else if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
+            StringBuilder sb = new StringBuilder(cmd);
+            for (String arg : args) {
+                sb.append(" '").append(arg.replace("'", "'\\''")).append("'");
+            }
+            Shell.Result result = Shell.cmd(sb.toString()).exec();
+            if (result.isSuccess()) {
+                return new ActionResult(actionType, true);
+            } else {
+                ActionResult r = new ActionResult(actionType, false);
+                r.setLogs(TextUtils.join("\n", result.getErr()));
+                return r;
+            }
+        }
+        return null;
+    }
+
+    @NonNull
     public static ActionResult create(@NonNull Context context, @SettingsType String settingsType,
                                       @NonNull String keyName, @NonNull String newValue) {
         return updateInternal(context, settingsType, keyName, newValue, ActionResult.TYPE_CREATE);
@@ -31,23 +75,11 @@ public final class SettingsUtils {
     @NonNull
     public static ActionResult delete(@NonNull Context context, @SettingsType String settingsType,
                                       @NonNull String keyName) {
-        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            try {
-                Shell.Result result = Shell.cmd("settings delete " + settingsType + " " + keyName).exec();
-                if (result.isSuccess()) {
-                    return new ActionResult(ActionResult.TYPE_DELETE, true);
-                } else {
-                    ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
-                    r.setLogs(TextUtils.join("\n", result.getErr()));
-                    return r;
-                }
-            } catch(Exception e) {
-                ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
-                r.setLogs(e.getMessage());
-                return r;
-            }
-        }
+        ActionResult privilegedResult = runPrivileged(ActionResult.TYPE_DELETE, "settings", "delete", settingsType, keyName);
+        if (privilegedResult != null) return privilegedResult;
+
         Boolean isGranted = EditorUtils.checkSettingsPermission(context, settingsType);
+...
         if (isGranted == null) {
             ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
             r.setLogs("Shizuku/Permission request in progress...");
@@ -85,22 +117,9 @@ public final class SettingsUtils {
             // Null just clears value not the key
             newValue = "";
         }
-        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            try {
-                Shell.Result result = Shell.cmd("settings put " + settingsType + " " + keyName + " '" + newValue + "'").exec();
-                if (result.isSuccess()) {
-                    return new ActionResult(actionType, true);
-                } else {
-                    ActionResult r = new ActionResult(actionType, false);
-                    r.setLogs(TextUtils.join("\n", result.getErr()));
-                    return r;
-                }
-            } catch(Exception e) {
-                ActionResult r = new ActionResult(actionType, false);
-                r.setLogs(e.getMessage());
-                return r;
-            }
-        }
+        ActionResult privilegedResult = runPrivileged(actionType, "settings", "put", settingsType, keyName, newValue);
+        if (privilegedResult != null) return privilegedResult;
+
         Boolean isGranted = EditorUtils.checkSettingsPermission(context, settingsType);
         if (isGranted == null) {
             ActionResult r = new ActionResult(actionType, false);

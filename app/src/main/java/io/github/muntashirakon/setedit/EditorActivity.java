@@ -51,6 +51,8 @@ import me.zhanghai.android.fastscroll.FastScrollerBuilder;
 
 public class EditorActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener,
         SearchView.OnQueryTextListener {
+    public static final String EXTRA_TABLE = "io.github.muntashirakon.setedit.EXTRA_TABLE";
+
     private static final String SELECTED_TABLE = "SELECTED_TABLE";
 
     @NonNull
@@ -156,6 +158,9 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             spinnerTable = actionBarView.findViewById(R.id.spinner);
             spinnerTable.setOnItemSelectedListener(this);
             spinnerTable.setAdapter(ArrayAdapter.createFromResource(this, R.array.settings_table, R.layout.item_spinner));
+            if (bundle == null) {
+                handleIntent(getIntent());
+            }
         }
         // List view
         listView = findViewById(R.id.recycler_view);
@@ -259,6 +264,19 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
     @Override
     public boolean onQueryTextSubmit(String query) {
         return false;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleIntent(intent);
+    }
+
+    private void handleIntent(Intent intent) {
+        int table = intent.getIntExtra(EXTRA_TABLE, -1);
+        if (table != -1 && spinnerTable != null) {
+            spinnerTable.setSelection(table);
+        }
     }
 
     @Override

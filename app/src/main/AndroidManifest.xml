@@ -25,7 +25,6 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
-    <uses-permission android:name="af.shizuku.plus.permission.API_V23" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
@@ -72,23 +71,14 @@
             android:exported="false"
             android:foregroundServiceType="specialUse" />
 
-        <!-- Shizuku+ Provider -->
+        <!-- Unified Shizuku Provider -->
         <provider
-            android:name="af.shizuku.ShizukuProvider"
+            android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
-        <!-- Legacy Shizuku Provider -->
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku.legacy"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:exported="true"
-            tools:ignore="ExportedContentProvider" />
 
         <meta-data
             android:name="android.max_aspect"

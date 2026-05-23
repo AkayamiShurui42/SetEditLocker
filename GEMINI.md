@@ -10,6 +10,6 @@
 
 - **Memory Management**: Ensure that background tasks (like `java.util.Timer`) are properly managed in Activity lifecycles (e.g., cancelled in `onDestroy`).
 - **Permissions**: The app requires `WRITE_SECURE_SETTINGS` for modifying Secure and Global tables. This can be granted via ADB, Root, or Shizuku+.
-- **Shizuku+ Integration**: Use the `af.shizuku` namespace for all Shizuku related APIs. The app now targets the `af.shizuku.plus.permission.API_V23` permission.
+- **Shizuku+ Integration**: Use the `rikka.shizuku` namespace for all Shizuku related APIs. The app now targets the `rikka.shizuku.plus.permission.API_V23` permission.
 - **Root/Shizuku**: The app supports both Root and Shizuku+ for elevated operations.
 - **No Legacy Support**: The `moe.shizuku` and `rikka.shizuku` namespaces have been completely removed.

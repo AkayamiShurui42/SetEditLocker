@@ -16,12 +16,12 @@ On earlier versions, you can only remove this protection on a rooted device by i
 
 Both `WRITE_SETTINGS` and `WRITE_SECURE_SETTINGS` permissions are optional if you do not need to edit any items.
 
-### Shizuku+ Support
+### Shizuku (Crimson) Support
 
-This version of SetEdit is optimized for **Shizuku+** (`af.shizuku` namespace). It allows you to modify **SECURE** and **GLOBAL** tables without root and without manual ADB commands (once Shizuku+ is authorized).
+This version of SetEdit is optimized for **Shizuku (Crimson)** (`rikka.shizuku` namespace). It allows you to modify **SECURE** and **GLOBAL** tables without root and without manual ADB commands (once Shizuku (Crimson) is authorized).
 
-- **Pure af.shizuku Namespace**: Fully migrated to the new Shizuku+ identity.
-- **Auto-Locking**: Works with Shizuku+ to persistently monitor and revert settings (Guardian mode).
+- **Pure rikka.shizuku Namespace**: Fully migrated to the new Shizuku (Crimson) identity.
+- **Auto-Locking**: Works with Shizuku (Crimson) to persistently monitor and revert settings (Guardian mode).
 
 ### Android 14 and Up
 

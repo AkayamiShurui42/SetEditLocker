@@ -6,14 +6,14 @@ import androidx.annotation.NonNull;
 
 import com.topjohnwu.superuser.Shell;
 
-import af.shizuku.Shizuku;
+import rikka.shizuku.Shizuku;
 
 public final class AndroidPropertyUtils {
     @NonNull
     public static ActionResult update(@NonNull String keyName, @NonNull String newValue) {
-        if (af.shizuku.Shizuku.pingBinder() && af.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (rikka.shizuku.Shizuku.pingBinder() && rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
-                af.shizuku.ShizukuRemoteProcess process = io.github.muntashirakon.setedit.EditorUtils.newShizukuProcess(new String[]{"setprop", keyName, newValue}, null, null);
+                rikka.shizuku.ShizukuRemoteProcess process = io.github.muntashirakon.setedit.EditorUtils.newShizukuProcess(new String[]{"setprop", keyName, newValue}, null, null);
                 int exitCode = process.waitFor();
                 if (exitCode == 0) {
                     return new ActionResult(ActionResult.TYPE_UPDATE, true);

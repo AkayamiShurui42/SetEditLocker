@@ -24,8 +24,8 @@ import com.topjohnwu.superuser.Shell;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import af.shizuku.Shizuku;
-import af.shizuku.ShizukuRemoteProcess;
+import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuRemoteProcess;
 
 import java.util.List;
 

@@ -65,7 +65,7 @@ class AndroidPropertiesRecyclerAdapter extends AbsRecyclerAdapter {
     @Override
     public boolean canEdit() {
         return Boolean.TRUE.equals(Shell.isAppGrantedRoot())
-                || (af.shizuku.Shizuku.pingBinder() && af.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED);
+                || (rikka.shizuku.Shizuku.pingBinder() && rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED);
     }
 
     @Override

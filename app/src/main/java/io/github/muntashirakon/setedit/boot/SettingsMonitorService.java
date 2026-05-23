@@ -33,7 +33,7 @@ import io.github.muntashirakon.setedit.TableType;
 import io.github.muntashirakon.setedit.utils.AndroidPropertyUtils;
 import io.github.muntashirakon.setedit.utils.ActionResult;
 import io.github.muntashirakon.setedit.utils.SettingsUtils;
-import rikka.shizuku.Shizuku;
+import af.shizuku.Shizuku;
 
 public class SettingsMonitorService extends Service {
     public static final String TAG = "SettingsMonitor";

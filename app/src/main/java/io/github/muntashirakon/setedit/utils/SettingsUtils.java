@@ -13,7 +13,7 @@ import com.topjohnwu.superuser.Shell;
 
 import io.github.muntashirakon.setedit.EditorUtils;
 import io.github.muntashirakon.setedit.SettingsType;
-import rikka.shizuku.Shizuku;
+import af.shizuku.Shizuku;
 
 public final class SettingsUtils {
     @NonNull
@@ -23,7 +23,7 @@ public final class SettingsUtils {
                 String[] fullCmd = new String[args.length + 1];
                 fullCmd[0] = cmd;
                 System.arraycopy(args, 0, fullCmd, 1, args.length);
-                rikka.shizuku.ShizukuRemoteProcess process = io.github.muntashirakon.setedit.EditorUtils.newShizukuProcess(fullCmd, null, null);
+                af.shizuku.ShizukuRemoteProcess process = io.github.muntashirakon.setedit.EditorUtils.newShizukuProcess(fullCmd, null, null);
                 int exitCode = process.waitFor();
                 if (exitCode == 0) {
                     return new ActionResult(actionType, true);

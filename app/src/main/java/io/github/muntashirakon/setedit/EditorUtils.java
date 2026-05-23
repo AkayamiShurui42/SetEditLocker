@@ -24,17 +24,16 @@ import com.topjohnwu.superuser.Shell;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import rikka.shizuku.Shizuku;
+import af.shizuku.Shizuku;
+import af.shizuku.ShizukuRemoteProcess;
 
 import java.util.List;
 
 public class EditorUtils {
     public static final int REQUEST_CODE_SHIZUKU = 1001;
 
-    public static rikka.shizuku.ShizukuRemoteProcess newShizukuProcess(String[] cmd, String[] env, String dir) throws Exception {
-        java.lang.reflect.Method method = rikka.shizuku.Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
-        method.setAccessible(true);
-        return (rikka.shizuku.ShizukuRemoteProcess) method.invoke(null, cmd, env, dir);
+    public static ShizukuRemoteProcess newShizukuProcess(String[] cmd, String[] env, String dir) {
+        return Shizuku.newProcess(cmd, env, dir);
     }
 
     /**

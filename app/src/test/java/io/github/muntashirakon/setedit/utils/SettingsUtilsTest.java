@@ -19,7 +19,7 @@ import com.topjohnwu.superuser.Shell;
 
 import io.github.muntashirakon.setedit.EditorUtils;
 import io.github.muntashirakon.setedit.SettingsType;
-import rikka.shizuku.Shizuku;
+import af.shizuku.Shizuku;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

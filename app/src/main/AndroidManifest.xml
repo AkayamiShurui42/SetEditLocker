@@ -62,7 +62,8 @@
 
         <service
             android:name=".boot.BootService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
         <service
             android:name=".boot.SettingsMonitorService"
@@ -80,5 +81,11 @@
         <meta-data
             android:name="android.max_aspect"
             android:value="2.4" />
+        <activity android:name=".ReadCrashActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

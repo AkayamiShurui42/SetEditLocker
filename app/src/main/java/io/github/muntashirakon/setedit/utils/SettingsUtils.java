@@ -37,11 +37,14 @@ public final class SettingsUtils {
             return r;
         } else if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
-                Shell.Result result = Shell.cmd("app_process -Djava.class.path=/data/local/tmp/shizuku/shizuku.apk /system/bin com.android.commands.settings.Settings delete " + settingsType + " " + keyName).exec();
-                if(result.isSuccess()) {
-                     return new ActionResult(ActionResult.TYPE_DELETE, true);
+                java.lang.reflect.Method newProcessMethod = rikka.shizuku.Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+                newProcessMethod.setAccessible(true);
+                Process p = (Process) newProcessMethod.invoke(null, new String[]{"sh", "-c", "settings delete " + settingsType + " " + keyName}, null, null);
+                int exitCode = p.waitFor();
+                if (exitCode == 0) {
+                    return new ActionResult(ActionResult.TYPE_DELETE, true);
                 } else {
-                     return new ActionResult(ActionResult.TYPE_DELETE, false);
+                    return new ActionResult(ActionResult.TYPE_DELETE, false);
                 }
             } catch(Exception e) {
                 ActionResult r = new ActionResult(ActionResult.TYPE_DELETE, false);
@@ -83,11 +86,14 @@ public final class SettingsUtils {
             return r;
         } else if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
-                Shell.Result result = Shell.cmd("app_process -Djava.class.path=/data/local/tmp/shizuku/shizuku.apk /system/bin com.android.commands.settings.Settings put " + settingsType + " " + keyName + " \"" + newValue + "\"").exec();
-                if(result.isSuccess()) {
-                     return new ActionResult(actionType, true);
+                java.lang.reflect.Method newProcessMethod = rikka.shizuku.Shizuku.class.getDeclaredMethod("newProcess", String[].class, String[].class, String.class);
+                newProcessMethod.setAccessible(true);
+                Process p = (Process) newProcessMethod.invoke(null, new String[]{"sh", "-c", "settings put " + settingsType + " " + keyName + " '" + newValue + "'"}, null, null);
+                int exitCode = p.waitFor();
+                if (exitCode == 0) {
+                    return new ActionResult(actionType, true);
                 } else {
-                     return new ActionResult(actionType, false);
+                    return new ActionResult(actionType, false);
                 }
             } catch(Exception e) {
                 ActionResult r = new ActionResult(actionType, false);

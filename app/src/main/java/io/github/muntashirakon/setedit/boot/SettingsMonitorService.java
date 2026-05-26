@@ -130,7 +130,10 @@ public class SettingsMonitorService extends Service {
             if (currentValue == null || !currentValue.equals(savedValue)) {
                 Log.i(TAG, "Locked setting changed: " + key + ". Reverting to " + savedValue);
                 handler.postDelayed(() -> {
-                    SettingsUtils.update(SettingsMonitorService.this, settingsType, key, savedValue);
+                    io.github.muntashirakon.setedit.utils.ActionResult result = SettingsUtils.update(SettingsMonitorService.this, settingsType, key, savedValue);
+                    if (!result.successful) {
+                        Log.e(TAG, "Failed to revert locked setting " + key + "! Error: " + (result.getLogs() != null ? result.getLogs() : "Permission denied"));
+                    }
                 }, 500); // 0.5s delay to make sure system finishes its update first
             }
         }

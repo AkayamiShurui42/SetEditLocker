@@ -1,5 +1,6 @@
 package io.github.muntashirakon.setedit;
 
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -107,6 +108,12 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         if (adapter.canCreateShortcut()) {
             performViaShortcut.setVisibility(View.VISIBLE);
         } else performViaShortcut.setVisibility(View.GONE);
+        if (adapter instanceof io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter && ((io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter) adapter).canLock()) {
+            performLock.setVisibility(View.VISIBLE);
+        } else {
+            performLock.setVisibility(View.GONE);
+            performLock.setChecked(false);
+        }
         keyNameView.requestFocus();
         new MaterialAlertDialogBuilder(this)
                 .setView(editorDialogView)
@@ -122,6 +129,12 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
                     if (performLock.isChecked()) {
                         SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
                         lockedPrefs.edit().putString(key + ":" + EditorUtils.toTableType(adapter.getListType()), val).apply();
+                        try {
+                            Intent serviceIntent = new Intent(EditorActivity.this, io.github.muntashirakon.setedit.boot.SettingsMonitorService.class);
+                            startService(serviceIntent);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
 
                     adapter.create(key, val);

@@ -48,6 +48,9 @@ public class EditorUtils {
                     try {
                         Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
                                 .setData(Uri.parse("package:" + BuildConfig.APPLICATION_ID));
+                        if (!(context instanceof android.app.Activity)) {
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        }
                         context.startActivity(intent);
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -58,14 +61,25 @@ public class EditorUtils {
         } else if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
             Shell.cmd("pm grant " + BuildConfig.APPLICATION_ID + " " + permission).exec();
         }
-        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            return true;
+        if (Shizuku.pingBinder()) {
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                return true;
+            } else {
+                try {
+                    Shizuku.requestPermission(0);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
     }
 
     @SuppressLint({"InflateParams", "SetTextI18n"})
     public static void displayGrantPermissionMessage(@NonNull Context context) {
+        if (!(context instanceof android.app.Activity)) {
+            return;
+        }
         View view = LayoutInflater.from(context).inflate(R.layout.dialog_unsupported, null);
         TextView tv = view.findViewById(R.id.txt);
         tv.setText("pm grant " + BuildConfig.APPLICATION_ID + " " + Manifest.permission.WRITE_SECURE_SETTINGS);

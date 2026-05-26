@@ -40,7 +40,11 @@ public class BootService extends Service {
                 .setProgress(0, 0, true)
                 .setVibrate(null)
                 .build();
-        startForeground(1, notification);
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(1, notification);
+        }
     }
 
     @Override

@@ -81,6 +81,22 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
         return false;
     }
 
+    public boolean canLock() {
+        if (Boolean.TRUE.equals(com.topjohnwu.superuser.Shell.isAppGrantedRoot())) {
+            return true;
+        }
+        if (rikka.shizuku.Shizuku.pingBinder() && rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        if (getListType() == TableTypeInt.TABLE_SECURE || getListType() == TableTypeInt.TABLE_GLOBAL) {
+            return androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_SECURE_SETTINGS) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+        if (getListType() == TableTypeInt.TABLE_SYSTEM) {
+            return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && android.provider.Settings.System.canWrite(context);
+        }
+        return false;
+    }
+
     public void create(String keyName, String newValue) {
     }
 
@@ -150,6 +166,12 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
         if (canCreateShortcut() && (canEdit || canDelete)) {
             performViaShortcut.setVisibility(View.VISIBLE);
         } else performViaShortcut.setVisibility(View.GONE);
+        if (canLock() && (canEdit || canDelete)) {
+            performLock.setVisibility(View.VISIBLE);
+        } else {
+            performLock.setVisibility(View.GONE);
+            performLock.setChecked(false);
+        }
         if (canEdit) {
             builder.setPositiveButton(R.string.save, (dialog, which) -> {
                 Editable editable = editText.getText();
@@ -163,6 +185,12 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
 
                 if (performLock.isChecked()) {
                     lockedPrefs.edit().putString(keyName + ":" + EditorUtils.toTableType(getListType()), newValue).apply();
+                    try {
+                        Intent serviceIntent = new Intent(context, io.github.muntashirakon.setedit.boot.SettingsMonitorService.class);
+                        context.startService(serviceIntent);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 } else {
                     lockedPrefs.edit().remove(keyName + ":" + EditorUtils.toTableType(getListType())).apply();
                 }

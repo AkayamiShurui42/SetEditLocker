@@ -14,11 +14,6 @@ import android.os.Build;
 import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.PrintWriter;
-import java.util.Date;
-
 public class App extends Application {
     static {
         // Set settings before the main shell can be created
@@ -31,27 +26,7 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            try {
-                File logsDir = new File(getExternalFilesDir(null), "logs");
-                if (!logsDir.exists()) logsDir.mkdirs();
-                File logFile = new File(logsDir, "crash_" + System.currentTimeMillis() + ".log");
-                try (FileOutputStream fos = new FileOutputStream(logFile)) {
-                    PrintWriter pw = new PrintWriter(fos);
-                    pw.println("Crash Date: " + new Date());
-                    pw.println("Thread: " + thread.getName());
-                    pw.println("Device: " + Build.MODEL + " (" + Build.DEVICE + ")");
-                    pw.println("Android Version: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
-                    pw.println("App Version: " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")");
-                    pw.println("----- Stack Trace -----");
-                    throwable.printStackTrace(pw);
-                    pw.flush();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            System.exit(1);
-        });
+        Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
 
         DynamicColors.applyToActivitiesIfAvailable(this);
         registerActivityLifecycleCallbacks(new ActivityAppearanceCallback());

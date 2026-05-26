@@ -11,6 +11,6 @@ public @interface TableTypeInt {
     int TABLE_PROPERTIES = 3;
     int TABLE_JAVA = 4;
     int TABLE_ENV = 5;
-    int TABLE_BOOT_AND_LOCKED = 6;
+    int TABLE_BOOT = 6;
     int TABLE_SHORTCUTS = 7;
 }

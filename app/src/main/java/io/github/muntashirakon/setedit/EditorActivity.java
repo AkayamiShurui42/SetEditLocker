@@ -9,6 +9,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.content.Context;
+import android.content.Intent;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
@@ -52,6 +53,8 @@ import me.zhanghai.android.fastscroll.FastScrollerBuilder;
 
 public class EditorActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener,
         SearchView.OnQueryTextListener {
+    public static final String EXTRA_TABLE = "io.github.muntashirakon.setedit.EXTRA_TABLE";
+
     private static final String SELECTED_TABLE = "SELECTED_TABLE";
 
     @NonNull
@@ -65,6 +68,7 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
     private AbsRecyclerAdapter adapter;
     private RecyclerView listView;
     private SharedPreferences preferences;
+    private Timer timer;
 
     private final ActivityResultLauncher<String> post21SaveLauncher = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"),
@@ -80,15 +84,15 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
                 }
             });
 
+    private final ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (!isGranted) {
+                    Toast.makeText(this, "Permission denied. Some features may not work.", Toast.LENGTH_SHORT).show();
+                }
+            });
+
     private void displayOneTimeWarningDialog() {
-        final SharedPreferences preferences = getPreferences(MODE_PRIVATE);
-        boolean hasWarned = preferences.getBoolean("has_warned", false);
-        if (hasWarned) return;
-        new MaterialAlertDialogBuilder(this)
-                .setMessage(R.string.startup_warning)
-                .setNegativeButton(R.string.close, null)
-                .show();
-        preferences.edit().putBoolean("has_warned", true).apply();
+        // Disabled as requested by user to remove disruptive popups.
     }
 
     public void addNewItemDialog() {
@@ -169,6 +173,9 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             spinnerTable = actionBarView.findViewById(R.id.spinner);
             spinnerTable.setOnItemSelectedListener(this);
             spinnerTable.setAdapter(ArrayAdapter.createFromResource(this, R.array.settings_table, R.layout.item_spinner));
+            if (bundle == null) {
+                handleIntent(getIntent());
+            }
         }
         // List view
         listView = findViewById(R.id.recycler_view);
@@ -182,21 +189,42 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
                 if (isGranted == null) return;
                 if (isGranted) {
                     addNewItemDialog();
-                } else {
-                    EditorUtils.displayGrantPermissionMessage(this);
                 }
             }
         });
         UiUtils.applyWindowInsetsAsMargin(addNewItem);
         // Display warning if it's the first time
         displayOneTimeWarningDialog();
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        EditorUtils.requestAllPermissions(this);
+
+        if (rikka.shizuku.Shizuku.pingBinder() && rikka.shizuku.Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            rikka.shizuku.Shizuku.requestPermission(EditorUtils.REQUEST_CODE_SHIZUKU);
+        }
+
         // Refresh settings after 5 seconds
-        new Timer().schedule(new TimerTask() {
+        timer = new Timer();
+        timer.schedule(new TimerTask() {
             @Override
             public void run() {
                 runOnUiThread(() -> adapter.refresh());
             }
         }, 5000, 5000);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (timer != null) {
+            timer.cancel();
+            timer.purge();
+        }
     }
 
     @Override
@@ -272,6 +300,19 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
     @Override
     public boolean onQueryTextSubmit(String query) {
         return false;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleIntent(intent);
+    }
+
+    private void handleIntent(Intent intent) {
+        int table = intent.getIntExtra(EXTRA_TABLE, -1);
+        if (table != -1 && spinnerTable != null) {
+            spinnerTable.setSelection(table);
+        }
     }
 
     @Override

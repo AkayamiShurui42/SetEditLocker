@@ -26,9 +26,11 @@
     <string name="theme_night">Night</string>
     <string name="theme_battery">Follow battery saver</string>
     <string name="theme">Theme</string>
+    <string name="boot_and_locked_settings">Locking and Booting Options</string>
     <string name="boot_items">Boot Items</string>
     <string name="perform_this_action_on_reboot">Perform this action on reboot</string>
     <string name="shortcuts">Shortcuts</string>
+    <string name="locked_settings">Locked Settings</string>
     <string name="perform_this_action_via_shortcut">Perform this action via a shortcut</string>
     <string name="select_shortcuts">Select shortcuts</string>
     <string name="create_new_shortcut">Create a new shortcut</string>
@@ -41,4 +43,6 @@
     <string name="delete_shortcut_title">Delete shortcut</string>
     <string name="delete_shortcut_message">SetEdit cannot delete a shortcut automatically. To delete the shortcut, you must remove it from the launcher where it was originally added.</string>
     <string name="drag_item">Drag item</string>
+    <string name="boot_actions_failed">Boot actions failed</string>
+    <string name="boot_actions_failed_msg">Tap to see logs</string>
 </resources>

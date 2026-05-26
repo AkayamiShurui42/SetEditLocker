@@ -1,8 +1,11 @@
 package io.github.muntashirakon.setedit.boot;
 
 import android.app.Notification;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -16,7 +19,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import io.github.muntashirakon.setedit.BuildConfig;
+import io.github.muntashirakon.setedit.EditorActivity;
 import io.github.muntashirakon.setedit.R;
+import io.github.muntashirakon.setedit.TableTypeInt;
 
 public class BootService extends Service {
     public static final String TAG = BootService.class.getSimpleName();
@@ -40,8 +45,8 @@ public class BootService extends Service {
                 .setProgress(0, 0, true)
                 .setVibrate(null)
                 .build();
-        if (android.os.Build.VERSION.SDK_INT >= 34) {
-            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         } else {
             startForeground(1, notification);
         }
@@ -58,7 +63,19 @@ public class BootService extends Service {
                     Log.i(TAG, "Finished successfully!");
                 } else {
                     Log.i(TAG, "Finished with errors!");
-                    // TODO: 7/3/24 Display a notification
+                    Intent editorIntent = new Intent(this, EditorActivity.class);
+                    editorIntent.putExtra(EditorActivity.EXTRA_TABLE, TableTypeInt.TABLE_BOOT_AND_LOCKED);
+                    PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, editorIntent, PendingIntent.FLAG_IMMUTABLE);
+                    Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                            .setAutoCancel(true)
+                            .setDefaults(NotificationCompat.DEFAULT_ALL)
+                            .setWhen(System.currentTimeMillis())
+                            .setSmallIcon(R.drawable.ic_launcher_foreground)
+                            .setContentTitle(getString(R.string.boot_actions_failed))
+                            .setContentText(getString(R.string.boot_actions_failed_msg))
+                            .setContentIntent(pendingIntent)
+                            .build();
+                    mNotificationManager.notify(2, notification);
                 }
             } finally {
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);

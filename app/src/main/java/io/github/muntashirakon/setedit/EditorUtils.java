@@ -25,17 +25,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import rikka.shizuku.Shizuku;
-import rikka.shizuku.ShizukuRemoteProcess;
 
 import java.util.List;
 
 public class EditorUtils {
-    public static final int REQUEST_CODE_SHIZUKU = 1001;
-
-    public static ShizukuRemoteProcess newShizukuProcess(String[] cmd, String[] env, String dir) {
-        return Shizuku.newProcess(cmd, env, dir);
-    }
-
     /**
      * Check whether the permission has been granted
      *
@@ -45,14 +38,6 @@ public class EditorUtils {
     public static Boolean checkSettingsPermission(@NonNull Context context, @SettingsType String settingsType) {
         String permission = SettingsType.SYSTEM_SETTINGS.equals(settingsType)
                 ? Manifest.permission.WRITE_SETTINGS : Manifest.permission.WRITE_SECURE_SETTINGS;
-        if (Shizuku.pingBinder()) {
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                return true;
-            } else if (context instanceof android.app.Activity) {
-                Shizuku.requestPermission(REQUEST_CODE_SHIZUKU);
-                return null;
-            }
-        }
         if (SettingsType.SYSTEM_SETTINGS.equals(settingsType)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(context)) {
                 if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
@@ -75,22 +60,36 @@ public class EditorUtils {
             }
         } else if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
             Shell.cmd("pm grant " + BuildConfig.APPLICATION_ID + " " + permission).exec();
-        } else if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            try {
-                newShizukuProcess(new String[]{"pm", "grant", BuildConfig.APPLICATION_ID, permission}, null, null).waitFor();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
         }
-        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            return true;
+        if (Shizuku.pingBinder()) {
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                return true;
+            } else {
+                try {
+                    Shizuku.requestPermission(0);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
     }
 
     @SuppressLint({"InflateParams", "SetTextI18n"})
     public static void displayGrantPermissionMessage(@NonNull Context context) {
-        // Disabled as requested by user to remove disruptive popups.
+        if (!(context instanceof android.app.Activity)) {
+            return;
+        }
+        View view = LayoutInflater.from(context).inflate(R.layout.dialog_unsupported, null);
+        TextView tv = view.findViewById(R.id.txt);
+        tv.setText("pm grant " + BuildConfig.APPLICATION_ID + " " + Manifest.permission.WRITE_SECURE_SETTINGS);
+        tv.setKeyListener(null);
+        tv.setSelectAllOnFocus(true);
+        tv.requestFocus();
+        new MaterialAlertDialogBuilder(context)
+                .setView(view)
+                .setNegativeButton(R.string.close, null)
+                .show();
     }
 
     @NonNull
@@ -121,17 +120,12 @@ public class EditorUtils {
                 return TableType.TABLE_JAVA;
             case TableTypeInt.TABLE_ENV:
                 return TableType.TABLE_ENV;
-            case TableTypeInt.TABLE_BOOT_AND_LOCKED:
-                return TableType.TABLE_BOOT_AND_LOCKED;
+            case TableTypeInt.TABLE_BOOT:
+                return TableType.TABLE_BOOT;
             case TableTypeInt.TABLE_SHORTCUTS:
                 return TableType.TABLE_SHORTCUTS;
             default:
                 throw new IllegalArgumentException("Invalid table type: " + tableTypeInt);
         }
-    }
-
-    public static void requestAllPermissions(@NonNull Context context) {
-        checkSettingsPermission(context, SettingsType.SYSTEM_SETTINGS);
-        checkSettingsPermission(context, SettingsType.SECURE_SETTINGS);
     }
 }

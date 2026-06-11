@@ -134,7 +134,7 @@ public class SettingsMonitorService extends Service {
                     if (!result.successful) {
                         Log.e(TAG, "Failed to revert locked setting " + key + "! Error: " + (result.getLogs() != null ? result.getLogs() : "Permission denied"));
                     }
-                }, 500); // 0.5s delay to make sure system finishes its update first
+                }, 100); // 0.1s delay to make sure system finishes its update first
             }
         }
     }

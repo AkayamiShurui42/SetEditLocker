@@ -190,13 +190,15 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         UiUtils.applyWindowInsetsAsMargin(addNewItem);
         // Display warning if it's the first time
         displayOneTimeWarningDialog();
-        // Refresh settings after 5 seconds
+        // Refresh settings after 5 seconds (disabled as per user request to not update while changing settings)
+        /*
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
                 runOnUiThread(() -> adapter.refresh());
             }
         }, 5000, 5000);
+        */
     }
 
     @Override

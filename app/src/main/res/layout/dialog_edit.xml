@@ -58,6 +58,7 @@
                 android:id="@+id/txt"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:dropDownHeight="160dp"
                 android:inputType="text"
                 android:textIsSelectable="true"
                 tools:text="@tools:sample/lorem[7]" />
@@ -68,6 +69,7 @@
             android:id="@+id/checkbox_lock"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="@string/lock_value" />
 
         <com.google.android.material.checkbox.MaterialCheckBox

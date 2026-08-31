@@ -11,9 +11,9 @@ import com.topjohnwu.superuser.Shell;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 
 import rikka.shizuku.Shizuku;
-import rikka.shizuku.ShizukuRemoteProcess;
 
 /**
  * Centralized privileged-operation bridge used by SetEditLocker.
@@ -85,7 +85,18 @@ public final class PrivilegeBridge {
         }
 
         try {
-            ShizukuRemoteProcess process = Shizuku.newProcess(command, null, null);
+            // API 13.1.5 keeps newProcess private. Isolate reflective access here rather
+            // than coupling the rest of SetEditLocker to a private Shizuku method.
+            Method method = Shizuku.class.getDeclaredMethod(
+                    "newProcess", String[].class, String[].class, String.class);
+            method.setAccessible(true);
+            Process process = (Process) method.invoke(null, command, null, null);
+            if (process == null) {
+                ActionResult result = new ActionResult(actionType, false);
+                result.setLogs("Shizuku process creation returned null");
+                return result;
+            }
+
             int exitCode = process.waitFor();
             ActionResult result = new ActionResult(actionType, exitCode == 0);
             if (exitCode != 0) {

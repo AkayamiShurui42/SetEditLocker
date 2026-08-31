@@ -9,14 +9,17 @@ import androidx.annotation.NonNull;
 
 import com.topjohnwu.superuser.Shell;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
 import rikka.shizuku.Shizuku;
-import rikka.shizuku.ShizukuPlusAPI;
+import rikka.shizuku.ShizukuRemoteProcess;
 
 /**
  * Centralized privileged-operation bridge used by SetEditLocker.
  *
- * The Shizuku+ API keeps stock Shizuku/Sui compatibility, while using the Plus
- * server's native client/provider path when Shizuku+ is installed.
+ * SetEditLocker's provider accepts both native Shizuku+ and stock Shizuku binder
+ * payloads. Once delivered, both use the stable Rikka client API here.
  */
 public final class PrivilegeBridge {
     private static final String TAG = "PrivilegeBridge";
@@ -82,15 +85,20 @@ public final class PrivilegeBridge {
         }
 
         try {
-            // The Plus API accepts an argument array, avoids shell quoting, and internally
-            // retains the standard Shizuku fallback when connected to a non-Plus server.
-            ShizukuPlusAPI.CommandResult commandResult = ShizukuPlusAPI.executeShell(command);
-            ActionResult result = new ActionResult(actionType, commandResult.isSuccess());
-            if (!commandResult.isSuccess()) {
-                String error = !TextUtils.isEmpty(commandResult.error)
-                        ? commandResult.error
-                        : "Privileged command exited with code " + commandResult.exitCode;
-                result.setLogs(error);
+            ShizukuRemoteProcess process = Shizuku.newProcess(command, null, null);
+            int exitCode = process.waitFor();
+            ActionResult result = new ActionResult(actionType, exitCode == 0);
+            if (exitCode != 0) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                StringBuilder error = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (error.length() > 0) error.append('\n');
+                    error.append(line);
+                }
+                result.setLogs(error.length() > 0
+                        ? error.toString()
+                        : "Privileged command exited with code " + exitCode);
             }
             return result;
         } catch (Throwable t) {

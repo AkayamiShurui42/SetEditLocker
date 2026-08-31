@@ -77,7 +77,7 @@
         </service>
 
         <provider
-            android:name="rikka.shizuku.ShizukuProvider"
+            android:name="rikka.shizuku.SetEditShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
@@ -86,6 +86,9 @@
 
         <meta-data
             android:name="af.shizuku.client.V3_SUPPORT"
+            android:value="true" />
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
             android:value="true" />
 
         <meta-data

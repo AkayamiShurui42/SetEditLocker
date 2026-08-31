@@ -27,13 +27,6 @@ import java.util.Set;
 
 import io.github.muntashirakon.setedit.SettingsType;
 
-/**
- * Records changes to Android's System, Secure and Global settings tables.
- *
- * ContentObserver events provide fast detection, while the Guardian's five-second
- * watchdog performs full snapshots so short-lived, newly-created and deleted keys
- * are still discoverable when Android does not emit a useful key-specific URI.
- */
 public final class SettingsChangeLogger {
     private static final String TAG = "SettingsChangeLogger";
     private static final String LOG_FILE_NAME = "settings-change-log.jsonl";
@@ -49,12 +42,15 @@ public final class SettingsChangeLogger {
 
     public static void initialize(@NonNull Context context) {
         synchronized (LOCK) {
-            snapshots.put(SettingsType.SYSTEM_SETTINGS,
-                    readTable(context, SettingsType.SYSTEM_SETTINGS));
-            snapshots.put(SettingsType.SECURE_SETTINGS,
-                    readTable(context, SettingsType.SECURE_SETTINGS));
-            snapshots.put(SettingsType.GLOBAL_SETTINGS,
-                    readTable(context, SettingsType.GLOBAL_SETTINGS));
+            Map<String, String> system = readTable(context, SettingsType.SYSTEM_SETTINGS);
+            Map<String, String> secure = readTable(context, SettingsType.SECURE_SETTINGS);
+            Map<String, String> global = readTable(context, SettingsType.GLOBAL_SETTINGS);
+            snapshots.put(SettingsType.SYSTEM_SETTINGS, system);
+            snapshots.put(SettingsType.SECURE_SETTINGS, secure);
+            snapshots.put(SettingsType.GLOBAL_SETTINGS, global);
+            recordTableInCatalog(context, SettingsType.SYSTEM_SETTINGS, system);
+            recordTableInCatalog(context, SettingsType.SECURE_SETTINGS, secure);
+            recordTableInCatalog(context, SettingsType.GLOBAL_SETTINGS, global);
             initialized = true;
         }
     }
@@ -86,20 +82,18 @@ public final class SettingsChangeLogger {
             boolean hadOldValue = previousTable.containsKey(key);
             String oldValue = previousTable.get(key);
             String newValue = readKey(context, settingsType, key);
+            SettingsDiscoveryCatalog.record(context, settingsType, key, newValue);
 
             if (newValue == null) {
                 if (hadOldValue) {
-                    appendChange(context, settingsType, key, oldValue, null,
-                            "deleted", "observer");
+                    appendChange(context, settingsType, key, oldValue, null, "deleted", "observer");
                     previousTable.remove(key);
                 }
             } else if (!hadOldValue) {
-                appendChange(context, settingsType, key, null, newValue,
-                        "created", "observer");
+                appendChange(context, settingsType, key, null, newValue, "created", "observer");
                 previousTable.put(key, newValue);
             } else if (!equalsNullable(oldValue, newValue)) {
-                appendChange(context, settingsType, key, oldValue, newValue,
-                        "changed", "observer");
+                appendChange(context, settingsType, key, oldValue, newValue, "changed", "observer");
                 previousTable.put(key, newValue);
             }
         }
@@ -111,6 +105,8 @@ public final class SettingsChangeLogger {
                                              @Nullable String displacedValue,
                                              @NonNull String lockedValue) {
         synchronized (LOCK) {
+            SettingsDiscoveryCatalog.record(context, settingsType, key, displacedValue);
+            SettingsDiscoveryCatalog.record(context, settingsType, key, lockedValue);
             appendChange(context, settingsType, key, displacedValue, lockedValue,
                     "guardian_restore", "guardian");
             Map<String, String> table = snapshots.get(settingsType);
@@ -136,9 +132,8 @@ public final class SettingsChangeLogger {
     public static void clear(@NonNull Context context) {
         synchronized (LOCK) {
             File log = getLogFile(context);
-            if (log.exists() && !log.delete()) {
-                Log.w(TAG, "Unable to delete settings change log");
-            }
+            if (log.exists() && !log.delete()) Log.w(TAG, "Unable to delete settings change log");
+            SettingsDiscoveryCatalog.clear(context);
             initialize(context);
         }
     }
@@ -149,6 +144,7 @@ public final class SettingsChangeLogger {
         Map<String, String> oldTable = snapshots.get(settingsType);
         if (oldTable == null) oldTable = new HashMap<>();
         Map<String, String> newTable = readTable(context, settingsType);
+        recordTableInCatalog(context, settingsType, newTable);
 
         Set<String> keys = new HashSet<>();
         keys.addAll(oldTable.keySet());
@@ -161,18 +157,23 @@ public final class SettingsChangeLogger {
             String newValue = newTable.get(key);
 
             if (!existedBefore && existsNow) {
-                appendChange(context, settingsType, key, null, newValue,
-                        "created", source);
+                appendChange(context, settingsType, key, null, newValue, "created", source);
             } else if (existedBefore && !existsNow) {
-                appendChange(context, settingsType, key, oldValue, null,
-                        "deleted", source);
+                appendChange(context, settingsType, key, oldValue, null, "deleted", source);
             } else if (existedBefore && !equalsNullable(oldValue, newValue)) {
-                appendChange(context, settingsType, key, oldValue, newValue,
-                        "changed", source);
+                appendChange(context, settingsType, key, oldValue, newValue, "changed", source);
             }
         }
 
         snapshots.put(settingsType, newTable);
+    }
+
+    private static void recordTableInCatalog(@NonNull Context context,
+                                             @NonNull String settingsType,
+                                             @NonNull Map<String, String> table) {
+        for (Map.Entry<String, String> entry : table.entrySet()) {
+            SettingsDiscoveryCatalog.record(context, settingsType, entry.getKey(), entry.getValue());
+        }
     }
 
     @NonNull
@@ -227,6 +228,8 @@ public final class SettingsChangeLogger {
                                      @Nullable String newValue,
                                      @NonNull String event,
                                      @NonNull String source) {
+        SettingsDiscoveryCatalog.record(context, settingsType, key, oldValue);
+        SettingsDiscoveryCatalog.record(context, settingsType, key, newValue);
         try {
             JSONObject object = new JSONObject();
             object.put("timestamp_ms", System.currentTimeMillis());

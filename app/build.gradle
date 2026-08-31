@@ -70,9 +70,9 @@ dependencies {
     implementation 'me.zhanghai.android.fastscroll:library:1.3.0'
     implementation 'com.github.topjohnwu.libsu:core:5.2.2'
 
-    // Native Shizuku+ client/provider. These are the actual JitPack multi-module
-    // coordinates for the public ShizukuPlus-API repository; they retain standard
-    // Shizuku/Sui compatibility while targeting af.shizuku.plus.api natively.
-    implementation 'com.github.thejaustin.ShizukuPlus-API:api:13.2.0-plus'
-    implementation 'com.github.thejaustin.ShizukuPlus-API:provider:13.2.0-plus'
+    // Native Shizuku+ client/provider pinned to a concrete public repository commit.
+    // The upstream repository currently has no matching release tag despite its README
+    // showing a release-style coordinate, so pinning avoids a mutable or nonexistent version.
+    implementation 'com.github.thejaustin.ShizukuPlus-API:api:b77af0e7b97eb232e8b2a62718bfab602c5da78d'
+    implementation 'com.github.thejaustin.ShizukuPlus-API:provider:b77af0e7b97eb232e8b2a62718bfab602c5da78d'
 }

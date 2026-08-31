@@ -71,7 +71,7 @@ public final class PrivilegeBridge {
     public static ActionResult execute(@ActionResult.ActionType int actionType,
                                        @NonNull String... command) {
         if (isRootGranted()) {
-            Shell.Result result = Shell.cmd(command).exec();
+            Shell.Result result = Shell.cmd(toShellCommand(command)).exec();
             ActionResult actionResult = new ActionResult(actionType, result.isSuccess());
             String error = TextUtils.join("\n", result.getErr());
             if (!TextUtils.isEmpty(error)) actionResult.setLogs(error);
@@ -111,5 +111,15 @@ public final class PrivilegeBridge {
             result.setLogs(t.getMessage() != null ? t.getMessage() : t.toString());
             return result;
         }
+    }
+
+    @NonNull
+    private static String toShellCommand(@NonNull String[] command) {
+        StringBuilder builder = new StringBuilder();
+        for (String argument : command) {
+            if (builder.length() > 0) builder.append(' ');
+            builder.append('\'').append(argument.replace("'", "'\\''")).append('\'');
+        }
+        return builder.toString();
     }
 }

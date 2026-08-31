@@ -50,6 +50,7 @@ import io.github.muntashirakon.setedit.adapters.KnownKeys;
 import io.github.muntashirakon.setedit.adapters.SettingsRecyclerAdapter;
 import io.github.muntashirakon.setedit.boot.ActionItem;
 import io.github.muntashirakon.setedit.boot.BootUtils;
+import io.github.muntashirakon.setedit.boot.SettingsChangeLogger;
 import io.github.muntashirakon.setedit.boot.SettingsDiscoveryCatalog;
 import io.github.muntashirakon.setedit.boot.SettingsMonitorService;
 import io.github.muntashirakon.setedit.shortcut.ShortcutUtils;
@@ -81,6 +82,20 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
                 try (OutputStream os = getContentResolver().openOutputStream(uri)) {
                     if (os == null) throw new IOException();
                     saveAsJson(os);
+                    Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show();
+                } catch (Throwable th) {
+                    th.printStackTrace();
+                    Toast.makeText(this, R.string.failed, Toast.LENGTH_SHORT).show();
+                }
+            });
+
+    private final ActivityResultLauncher<String> changeLogSaveLauncher = registerForActivityResult(
+            new ActivityResultContracts.CreateDocument("application/json"),
+            uri -> {
+                if (uri == null) return;
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    if (os == null) throw new IOException();
+                    SettingsChangeLogger.export(this, os);
                     Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show();
                 } catch (Throwable th) {
                     th.printStackTrace();
@@ -278,6 +293,9 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         if (id == R.id.action_export) {
             post21SaveLauncher.launch(getFileName());
             return true;
+        } else if (id == R.id.action_export_change_log) {
+            changeLogSaveLauncher.launch(getChangeLogFileName());
+            return true;
         } else if (id == R.id.action_theme) {
             List<Integer> themeMap = new ArrayList<>(4);
             themeMap.add(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
@@ -348,6 +366,10 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
 
     private String getFileName() {
         return "SetEdit-" + System.currentTimeMillis() + ".json";
+    }
+
+    private String getChangeLogFileName() {
+        return "SetEdit-changes-" + System.currentTimeMillis() + ".jsonl";
     }
 
     private void saveAsJson(OutputStream os) throws JSONException, IOException {

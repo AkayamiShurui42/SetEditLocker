@@ -70,8 +70,9 @@ dependencies {
     implementation 'me.zhanghai.android.fastscroll:library:1.3.0'
     implementation 'com.github.topjohnwu.libsu:core:5.2.2'
 
-    // Shizuku+ API is backward-compatible with stock Shizuku/Sui while its provider
-    // targets the native af.shizuku.plus.api manager directly. This removes the
-    // SetEditLocker-side dependency on Shizuku+'s optional Compat Hub.
-    implementation 'com.github.thejaustin:Shizuku+-API:13.2.0-plus'
+    // Native Shizuku+ client/provider. These are the actual JitPack multi-module
+    // coordinates for the public ShizukuPlus-API repository; they retain standard
+    // Shizuku/Sui compatibility while targeting af.shizuku.plus.api natively.
+    implementation 'com.github.thejaustin.ShizukuPlus-API:api:13.2.0-plus'
+    implementation 'com.github.thejaustin.ShizukuPlus-API:provider:13.2.0-plus'
 }

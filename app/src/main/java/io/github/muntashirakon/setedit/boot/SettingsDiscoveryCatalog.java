@@ -31,11 +31,13 @@ public final class SettingsDiscoveryCatalog {
                               @Nullable String value) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
+        boolean changed = false;
 
         String keysStorage = KEY_PREFIX + settingsType;
         Set<String> keys = new HashSet<>(prefs.getStringSet(keysStorage, Collections.emptySet()));
         if (keys.add(key)) {
             editor.putStringSet(keysStorage, keys);
+            changed = true;
         }
 
         if (value != null) {
@@ -49,10 +51,13 @@ public final class SettingsDiscoveryCatalog {
                             Math.max(0, sorted.size() - MAX_VALUES_PER_KEY), sorted.size()));
                 }
                 editor.putStringSet(valuesStorage, values);
+                changed = true;
             }
         }
 
-        editor.apply();
+        // The five-second snapshot touches every visible key. Avoid scheduling a disk write
+        // unless the catalog genuinely learned a new key or value.
+        if (changed) editor.apply();
     }
 
     @NonNull

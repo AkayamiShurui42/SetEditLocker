@@ -5,8 +5,10 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ServiceInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -19,34 +21,68 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.github.muntashirakon.setedit.BuildConfig;
-import io.github.muntashirakon.setedit.EditorUtils;
 import io.github.muntashirakon.setedit.R;
 import io.github.muntashirakon.setedit.SettingsType;
 import io.github.muntashirakon.setedit.TableType;
+import io.github.muntashirakon.setedit.utils.ActionResult;
+import io.github.muntashirakon.setedit.utils.AndroidPropertyUtils;
 import io.github.muntashirakon.setedit.utils.SettingsUtils;
+import rikka.shizuku.Shizuku;
 
 public class SettingsMonitorService extends Service {
     public static final String TAG = "SettingsMonitor";
     public static final String NOTIFICATION_CHANNEL_ID = BuildConfig.APPLICATION_ID + ".notification.MONITOR_SERVICE";
 
+    private static final long WATCHDOG_INTERVAL_MS = 5000L;
+    private static final long REVERT_DELAY_MS = 500L;
+
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Map<String, Runnable> pendingReverts = new ConcurrentHashMap<>();
+
     private Handler handler;
     private SettingsObserver systemObserver;
     private SettingsObserver secureObserver;
     private SettingsObserver globalObserver;
+    private Shizuku.OnBinderReceivedListener shizukuListener;
+
+    private final Runnable watchdog = new Runnable() {
+        @Override
+        public void run() {
+            executor.execute(() -> {
+                // Full snapshot diff catches new/deleted/transient keys even when Android does not
+                // give us a key-specific ContentObserver callback.
+                SettingsChangeLogger.scanAll(SettingsMonitorService.this);
+                // The watchdog path deliberately uses the same 500 ms correction delay requested
+                // for observer events. Maximum fallback detection time is roughly 5.5 seconds.
+                applyAllLockedSettings(false);
+            });
+            if (handler != null) handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
+        }
+    };
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Settings Monitor Active")
-                .setContentText("Monitoring locked settings...")
+                .setContentTitle("Settings Guardian Active")
+                .setContentText("Enforcing locks and learning setting changes")
                 .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setOngoing(true)
                 .build();
-        startForeground(2, notification);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(2, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(2, notification);
+        }
 
         handler = new Handler(Looper.getMainLooper());
 
@@ -57,19 +93,53 @@ public class SettingsMonitorService extends Service {
         getContentResolver().registerContentObserver(Settings.System.CONTENT_URI, true, systemObserver);
         getContentResolver().registerContentObserver(Settings.Secure.CONTENT_URI, true, secureObserver);
         getContentResolver().registerContentObserver(Settings.Global.CONTENT_URI, true, globalObserver);
+
+        executor.execute(() -> {
+            SettingsChangeLogger.initialize(SettingsMonitorService.this);
+            applyAllLockedSettings(true);
+        });
+        handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
+
+        // Shizuku+ intentionally exposes the normal Shizuku client API through its compatibility
+        // layer. When that binder arrives or reconnects, immediately reassert every saved lock.
+        shizukuListener = () -> executor.execute(() -> applyAllLockedSettings(true));
+        try {
+            Shizuku.addBinderReceivedListenerSticky(shizukuListener);
+        } catch (Throwable t) {
+            Log.w(TAG, "Unable to register Shizuku binder listener", t);
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        executor.execute(() -> applyAllLockedSettings(true));
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
+        if (handler != null) {
+            handler.removeCallbacks(watchdog);
+            for (Runnable runnable : pendingReverts.values()) {
+                handler.removeCallbacks(runnable);
+            }
+            pendingReverts.clear();
+        }
+
         if (systemObserver != null) getContentResolver().unregisterContentObserver(systemObserver);
         if (secureObserver != null) getContentResolver().unregisterContentObserver(secureObserver);
         if (globalObserver != null) getContentResolver().unregisterContentObserver(globalObserver);
+
+        if (shizukuListener != null) {
+            try {
+                Shizuku.removeBinderReceivedListener(shizukuListener);
+            } catch (Throwable t) {
+                Log.w(TAG, "Unable to unregister Shizuku binder listener", t);
+            }
+        }
+
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     @Nullable
@@ -79,19 +149,20 @@ public class SettingsMonitorService extends Service {
     }
 
     private void createNotificationChannel() {
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-        NotificationChannelCompat notificationChannel = new NotificationChannelCompat.Builder(NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_MIN)
+        NotificationManagerCompat manager = NotificationManagerCompat.from(this);
+        NotificationChannelCompat channel = new NotificationChannelCompat.Builder(
+                NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_MIN)
                 .setVibrationEnabled(false)
-                .setName("Settings Monitor")
+                .setName("Settings Guardian")
                 .build();
-        notificationManager.createNotificationChannel(notificationChannel);
+        manager.createNotificationChannel(channel);
     }
 
     private class SettingsObserver extends ContentObserver {
         private final String settingsType;
         private final String tableType;
 
-        public SettingsObserver(Handler handler, String settingsType, String tableType) {
+        SettingsObserver(Handler handler, String settingsType, String tableType) {
             super(handler);
             this.settingsType = settingsType;
             this.tableType = tableType;
@@ -100,42 +171,161 @@ public class SettingsMonitorService extends Service {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             super.onChange(selfChange, uri);
-            if (uri != null) {
-                String key = uri.getLastPathSegment();
-                if (key != null) {
-                    checkAndRevertSetting(key, settingsType, tableType);
-                }
+
+            if (uri == null) {
+                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                return;
+            }
+
+            String key = uri.getLastPathSegment();
+            if (key == null || key.isEmpty() || settingsType.equals(key)) {
+                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                return;
+            }
+
+            // Capture Android's new value before Guardian puts a locked value back. This is what
+            // lets Game Mode and similar OEM features teach the catalog about hidden values.
+            executor.execute(() -> SettingsChangeLogger.captureKey(
+                    SettingsMonitorService.this, settingsType, key));
+
+            // Fast enforcement path: a real observer event gets corrected after 500 ms.
+            checkAndScheduleSettingRevert(key, settingsType, tableType, true);
+        }
+    }
+
+    private void applyAllLockedSettings(boolean immediate) {
+        SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
+        for (Map.Entry<String, ?> entry : lockedPrefs.getAll().entrySet()) {
+            String fullKey = entry.getKey();
+            if (fullKey == null) continue;
+
+            int lastColon = fullKey.lastIndexOf(':');
+            if (lastColon <= 0 || lastColon >= fullKey.length() - 1) continue;
+
+            String key = fullKey.substring(0, lastColon);
+            String tableType = fullKey.substring(lastColon + 1);
+            String savedValue = String.valueOf(entry.getValue());
+
+            if (TableType.TABLE_SYSTEM.equals(tableType)) {
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.SYSTEM_SETTINGS, tableType, !immediate);
+            } else if (TableType.TABLE_SECURE.equals(tableType)) {
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.SECURE_SETTINGS, tableType, !immediate);
+            } else if (TableType.TABLE_GLOBAL.equals(tableType)) {
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.GLOBAL_SETTINGS, tableType, !immediate);
+            } else if (TableType.TABLE_PROPERTIES.equals(tableType)) {
+                checkAndSchedulePropertyRevert(key, savedValue, !immediate);
             }
         }
     }
 
-    private void checkAndRevertSetting(String key, String settingsType, String tableType) {
+    private void checkAndScheduleSettingRevert(String key,
+                                               String settingsType,
+                                               String tableType,
+                                               boolean delayed) {
         SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
-        String savedValue = lockedPrefs.getString(key + ":" + tableType, null);
-        if (savedValue != null) {
-            String currentValue = null;
-            try {
-                if (SettingsType.SYSTEM_SETTINGS.equals(settingsType)) {
-                    currentValue = Settings.System.getString(getContentResolver(), key);
-                } else if (SettingsType.SECURE_SETTINGS.equals(settingsType)) {
-                    currentValue = Settings.Secure.getString(getContentResolver(), key);
-                } else if (SettingsType.GLOBAL_SETTINGS.equals(settingsType)) {
-                    currentValue = Settings.Global.getString(getContentResolver(), key);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
-            // Only revert if changed
-            if (currentValue == null || !currentValue.equals(savedValue)) {
-                Log.i(TAG, "Locked setting changed: " + key + ". Reverting to " + savedValue);
-                handler.postDelayed(() -> {
-                    io.github.muntashirakon.setedit.utils.ActionResult result = SettingsUtils.update(SettingsMonitorService.this, settingsType, key, savedValue);
-                    if (!result.successful) {
-                        Log.e(TAG, "Failed to revert locked setting " + key + "! Error: " + (result.getLogs() != null ? result.getLogs() : "Permission denied"));
-                    }
-                }, 100); // 0.1s delay to make sure system finishes its update first
-            }
+        String savedValue;
+        try {
+            savedValue = lockedPrefs.getString(key + ":" + tableType, null);
+        } catch (ClassCastException e) {
+            savedValue = null;
         }
+        if (savedValue == null) return;
+
+        String currentValue = readSetting(settingsType, key);
+        if (savedValue.equals(currentValue)) return;
+
+        String pendingKey = tableType + ":" + key;
+        Runnable revert = () -> {
+            pendingReverts.remove(pendingKey);
+            executor.execute(() -> {
+                String latestSavedValue;
+                try {
+                    latestSavedValue = getSharedPreferences("locked_settings", Context.MODE_PRIVATE)
+                            .getString(key + ":" + tableType, null);
+                } catch (ClassCastException e) {
+                    latestSavedValue = null;
+                }
+                if (latestSavedValue == null) return;
+
+                String displacedValue = readSetting(settingsType, key);
+                if (latestSavedValue.equals(displacedValue)) return;
+
+                ActionResult result = SettingsUtils.update(
+                        SettingsMonitorService.this, settingsType, key, latestSavedValue);
+                if (!result.successful) {
+                    Log.e(TAG, "Failed to revert locked setting " + key + ": " + result.getLogs());
+                    return;
+                }
+
+                SettingsChangeLogger.recordGuardianRestore(
+                        SettingsMonitorService.this,
+                        settingsType,
+                        key,
+                        displacedValue,
+                        latestSavedValue);
+                Log.i(TAG, "Reverted locked setting " + key + " to " + latestSavedValue);
+            });
+        };
+
+        scheduleRevert(pendingKey, revert, delayed ? REVERT_DELAY_MS : 0L);
+    }
+
+    private void checkAndSchedulePropertyRevert(String key, String savedValue, boolean delayed) {
+        String currentValue = AndroidPropertyUtils.read(key);
+        if (currentValue != null && savedValue.equals(currentValue)) return;
+
+        String pendingKey = TableType.TABLE_PROPERTIES + ":" + key;
+        Runnable revert = () -> {
+            pendingReverts.remove(pendingKey);
+            executor.execute(() -> {
+                SharedPreferences prefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
+                String latestSavedValue;
+                try {
+                    latestSavedValue = prefs.getString(
+                            key + ":" + TableType.TABLE_PROPERTIES, null);
+                } catch (ClassCastException e) {
+                    latestSavedValue = null;
+                }
+                if (latestSavedValue == null) return;
+
+                String latestValue = AndroidPropertyUtils.read(key);
+                if (latestSavedValue.equals(latestValue)) return;
+
+                ActionResult result = AndroidPropertyUtils.update(key, latestSavedValue);
+                if (!result.successful) {
+                    Log.e(TAG, "Failed to revert locked property " + key + ": " + result.getLogs());
+                } else {
+                    Log.i(TAG, "Reverted locked property " + key + " to " + latestSavedValue);
+                }
+            });
+        };
+
+        scheduleRevert(pendingKey, revert, delayed ? REVERT_DELAY_MS : 0L);
+    }
+
+    private void scheduleRevert(String pendingKey, Runnable replacement, long delayMs) {
+        if (handler == null) return;
+        Runnable old = pendingReverts.put(pendingKey, replacement);
+        if (old != null) handler.removeCallbacks(old);
+        handler.postDelayed(replacement, delayMs);
+    }
+
+    @Nullable
+    private String readSetting(String settingsType, String key) {
+        try {
+            if (SettingsType.SYSTEM_SETTINGS.equals(settingsType)) {
+                return Settings.System.getString(getContentResolver(), key);
+            } else if (SettingsType.SECURE_SETTINGS.equals(settingsType)) {
+                return Settings.Secure.getString(getContentResolver(), key);
+            } else if (SettingsType.GLOBAL_SETTINGS.equals(settingsType)) {
+                return Settings.Global.getString(getContentResolver(), key);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Unable to read setting " + key, t);
+        }
+        return null;
     }
 }

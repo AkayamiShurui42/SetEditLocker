@@ -11,6 +11,7 @@ import com.topjohnwu.superuser.Shell;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import rikka.shizuku.Shizuku;
@@ -19,7 +20,7 @@ import rikka.shizuku.Shizuku;
  * Centralized privileged-operation bridge used by SetEditLocker.
  *
  * SetEditLocker's provider accepts both native Shizuku+ and stock Shizuku binder
- * payloads. Once delivered, both use the stable Rikka client API here.
+ * payloads. Once attached, both use the stable Rikka client API here.
  */
 public final class PrivilegeBridge {
     private static final String TAG = "PrivilegeBridge";
@@ -113,10 +114,24 @@ public final class PrivilegeBridge {
             }
             return result;
         } catch (Throwable t) {
+            Throwable cause = unwrap(t);
+            Log.e(TAG, "Privileged Shizuku command failed", cause);
             ActionResult result = new ActionResult(actionType, false);
-            result.setLogs(t.getMessage() != null ? t.getMessage() : t.toString());
+            String message = cause.getMessage();
+            result.setLogs(cause.getClass().getName()
+                    + (TextUtils.isEmpty(message) ? "" : ": " + message));
             return result;
         }
+    }
+
+    @NonNull
+    private static Throwable unwrap(@NonNull Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof InvocationTargetException
+                && ((InvocationTargetException) current).getTargetException() != null) {
+            current = ((InvocationTargetException) current).getTargetException();
+        }
+        return current;
     }
 
     @NonNull

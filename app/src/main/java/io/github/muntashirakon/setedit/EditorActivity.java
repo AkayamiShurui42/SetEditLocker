@@ -1,17 +1,17 @@
 package io.github.muntashirakon.setedit;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.content.Context;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -23,30 +23,38 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.AppCompatSpinner;
 import androidx.appcompat.widget.SearchView;
+import androidx.core.content.ContextCompat;
+import androidx.core.util.Pair;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 
 import org.json.JSONException;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.Set;
 
 import io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter;
 import io.github.muntashirakon.setedit.adapters.AdapterProvider;
+import io.github.muntashirakon.setedit.adapters.KnownKeys;
 import io.github.muntashirakon.setedit.adapters.SettingsRecyclerAdapter;
 import io.github.muntashirakon.setedit.boot.ActionItem;
 import io.github.muntashirakon.setedit.boot.BootUtils;
+import io.github.muntashirakon.setedit.boot.SettingsDiscoveryCatalog;
+import io.github.muntashirakon.setedit.boot.SettingsMonitorService;
 import io.github.muntashirakon.setedit.shortcut.ShortcutUtils;
 import io.github.muntashirakon.setedit.utils.ActionResult;
+import io.github.muntashirakon.setedit.utils.PrivilegeBridge;
 import io.github.muntashirakon.util.UiUtils;
 import me.zhanghai.android.fastscroll.FastScrollerBuilder;
 
@@ -81,74 +89,133 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             });
 
     private void displayOneTimeWarningDialog() {
-        final SharedPreferences preferences = getPreferences(MODE_PRIVATE);
-        boolean hasWarned = preferences.getBoolean("has_warned", false);
+        final SharedPreferences warningPreferences = getPreferences(MODE_PRIVATE);
+        boolean hasWarned = warningPreferences.getBoolean("has_warned", false);
         if (hasWarned) return;
         new MaterialAlertDialogBuilder(this)
                 .setMessage(R.string.startup_warning)
                 .setNegativeButton(R.string.close, null)
                 .show();
-        preferences.edit().putBoolean("has_warned", true).apply();
+        warningPreferences.edit().putBoolean("has_warned", true).apply();
     }
 
     public void addNewItemDialog() {
         View editorDialogView = getLayoutInflater().inflate(R.layout.dialog_new, null);
-        com.google.android.material.textfield.MaterialAutoCompleteTextView keyNameView = editorDialogView.findViewById(R.id.txtName);
-
-        ArrayAdapter<String> keysAdapter = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, io.github.muntashirakon.setedit.adapters.KnownKeys.KNOWN_KEYS);
-        keyNameView.setAdapter(keysAdapter);
-
-        EditText keyValueView = editorDialogView.findViewById(R.id.txtValue);
-        MaterialCheckBox performOnReboot = editorDialogView.findViewById(R.id.checkbox);
+        MaterialAutoCompleteTextView keyNameView = editorDialogView.findViewById(R.id.txtName);
+        MaterialAutoCompleteTextView keyValueView = editorDialogView.findViewById(R.id.txtValue);
         MaterialCheckBox performViaShortcut = editorDialogView.findViewById(R.id.checkbox_2);
         MaterialCheckBox performLock = editorDialogView.findViewById(R.id.checkbox_lock);
-        if (adapter.canSetOnReboot()) {
-            performOnReboot.setVisibility(View.VISIBLE);
-        } else performOnReboot.setVisibility(View.GONE);
+
         if (adapter.canCreateShortcut()) {
             performViaShortcut.setVisibility(View.VISIBLE);
-        } else performViaShortcut.setVisibility(View.GONE);
-        if (adapter instanceof io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter && ((io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter) adapter).canLock()) {
+        } else {
+            performViaShortcut.setVisibility(View.GONE);
+        }
+        if (adapter.canLock()) {
             performLock.setVisibility(View.VISIBLE);
         } else {
             performLock.setVisibility(View.GONE);
             performLock.setChecked(false);
         }
+
+        configureSettingSuggestions(keyNameView, keyValueView);
         keyNameView.requestFocus();
+
         new MaterialAlertDialogBuilder(this)
                 .setView(editorDialogView)
                 .setTitle(R.string.new_item)
-                .setPositiveButton(R.string.save, ((dialog, which) -> {
+                .setPositiveButton(R.string.save, (dialog, which) -> {
                     Editable keyName = keyNameView.getText();
                     Editable keyValue = keyValueView.getText();
                     if (TextUtils.isEmpty(keyName) || keyValue == null) return;
 
                     String key = keyName.toString();
                     String val = keyValue.toString();
-
-                    if (performLock.isChecked()) {
-                        SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
-                        lockedPrefs.edit().putString(key + ":" + EditorUtils.toTableType(adapter.getListType()), val).apply();
-                        try {
-                            Intent serviceIntent = new Intent(EditorActivity.this, io.github.muntashirakon.setedit.boot.SettingsMonitorService.class);
-                            startService(serviceIntent);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
+                    String tableType = EditorUtils.toTableType(adapter.getListType());
 
                     adapter.create(key, val);
-                    if (adapter.canSetOnReboot() && performOnReboot.isChecked()) {
-                        ActionItem actionItem = new ActionItem(ActionResult.TYPE_CREATE, EditorUtils.toTableType(adapter.getListType()), keyName.toString(), keyValue.toString());
-                        BootUtils.add(this, actionItem);
+
+                    if (performLock.isChecked()) {
+                        getSharedPreferences("locked_settings", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString(key + ":" + tableType, val)
+                                .apply();
+                        // A lock is persistent by definition. settings put/update also recreates
+                        // a missing key on boot, so UPDATE is the correct unified boot action.
+                        BootUtils.add(this, new ActionItem(
+                                ActionResult.TYPE_UPDATE, tableType, key, val));
+                        startGuardian();
                     }
+
                     if (adapter.canCreateShortcut() && performViaShortcut.isChecked()) {
-                        ActionItem actionItem = new ActionItem(ActionResult.TYPE_CREATE, EditorUtils.toTableType(adapter.getListType()), keyName.toString(), keyValue.toString());
+                        ActionItem actionItem = new ActionItem(
+                                ActionResult.TYPE_CREATE, tableType, key, val);
                         ShortcutUtils.displayShortcutTypeChooserDialog(this, actionItem);
                     }
-                }))
+                })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private void configureSettingSuggestions(@NonNull MaterialAutoCompleteTextView keyNameView,
+                                             @NonNull MaterialAutoCompleteTextView keyValueView) {
+        if (!(adapter instanceof SettingsRecyclerAdapter)) return;
+
+        String settingsType = ((SettingsRecyclerAdapter) adapter).getSettingsType();
+        Set<String> currentKeys = new HashSet<>();
+        for (Pair<String, String> item : adapter.getAllItems()) {
+            currentKeys.add(item.first);
+        }
+
+        LinkedHashSet<String> suggestions = new LinkedHashSet<>();
+        suggestions.addAll(KnownKeys.forSettingsType(settingsType));
+        suggestions.addAll(SettingsDiscoveryCatalog.getKeys(this, settingsType));
+        suggestions.removeAll(currentKeys);
+
+        ArrayAdapter<String> keyAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_dropdown_item_1line,
+                new ArrayList<>(suggestions));
+        keyNameView.setAdapter(keyAdapter);
+        keyNameView.setThreshold(0);
+        keyNameView.setOnClickListener(v -> keyNameView.showDropDown());
+
+        Runnable updateValueSuggestions = () -> {
+            Editable editable = keyNameView.getText();
+            String key = editable != null ? editable.toString() : "";
+            List<String> observedValues = SettingsDiscoveryCatalog.getValues(this, settingsType, key);
+            keyValueView.setAdapter(new ArrayAdapter<>(
+                    this,
+                    android.R.layout.simple_dropdown_item_1line,
+                    observedValues));
+            keyValueView.setThreshold(0);
+        };
+
+        keyNameView.setOnItemClickListener((parent, view, position, id) -> updateValueSuggestions.run());
+        keyNameView.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                updateValueSuggestions.run();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+        keyValueView.setOnClickListener(v -> keyValueView.showDropDown());
+    }
+
+    private void startGuardian() {
+        try {
+            ContextCompat.startForegroundService(
+                    this, new Intent(this, SettingsMonitorService.class));
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     @Override
@@ -159,26 +226,32 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         super.onCreate(bundle);
         setContentView(R.layout.activity_editor);
         setSupportActionBar(findViewById(R.id.toolbar));
+
+        // Ask the existing Shizuku/Shizuku+ provider for access when its binder is already up.
+        // This changes only SetEditLocker; no Shizuku-side code or configuration is touched.
+        PrivilegeBridge.requestShizukuPermissionIfNeeded(this);
+
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
             actionBar.setDisplayShowTitleEnabled(false);
             actionBar.setDisplayShowCustomEnabled(true);
             actionBar.setCustomView(R.layout.toolbar_custom_view);
             View actionBarView = actionBar.getCustomView();
-            // Item view
             spinnerTable = actionBarView.findViewById(R.id.spinner);
             spinnerTable.setOnItemSelectedListener(this);
-            spinnerTable.setAdapter(ArrayAdapter.createFromResource(this, R.array.settings_table, R.layout.item_spinner));
+            spinnerTable.setAdapter(ArrayAdapter.createFromResource(
+                    this, R.array.settings_table, R.layout.item_spinner));
         }
-        // List view
+
         listView = findViewById(R.id.recycler_view);
         listView.setLayoutManager(new LinearLayoutManager(this));
         new FastScrollerBuilder(listView).useMd2Style().build();
-        // Add efab
+
         addNewItem = findViewById(R.id.efab);
         addNewItem.setOnClickListener(v -> {
             if (adapter instanceof SettingsRecyclerAdapter) {
-                Boolean isGranted = EditorUtils.checkSettingsPermission(this, ((SettingsRecyclerAdapter) adapter).getSettingsType());
+                Boolean isGranted = EditorUtils.checkSettingsPermission(
+                        this, ((SettingsRecyclerAdapter) adapter).getSettingsType());
                 if (isGranted == null) return;
                 if (isGranted) {
                     addNewItemDialog();
@@ -188,25 +261,13 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             }
         });
         UiUtils.applyWindowInsetsAsMargin(addNewItem);
-        // Display warning if it's the first time
         displayOneTimeWarningDialog();
-        // Refresh settings after 5 seconds (disabled as per user request to not update while changing settings)
-        /*
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(() -> adapter.refresh());
-            }
-        }, 5000, 5000);
-        */
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.activity_editor_actions, menu);
-        // Search view
         searchView = (SearchView) menu.findItem(R.id.action_search).getActionView();
-        // Set query listener
         searchView.setOnQueryTextListener(this);
         return super.onCreateOptionsMenu(menu);
     }
@@ -219,7 +280,6 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             return true;
         } else if (id == R.id.action_theme) {
             List<Integer> themeMap = new ArrayList<>(4);
-            // Sequence must be preserved
             themeMap.add(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
             themeMap.add(AppCompatDelegate.MODE_NIGHT_NO);
             themeMap.add(AppCompatDelegate.MODE_NIGHT_YES);
@@ -243,7 +303,9 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         listView.setAdapter(adapter = adapterProvider.getRecyclerAdapter(position));
         if (adapter.canCreate()) {
             addNewItem.show();
-        } else addNewItem.hide();
+        } else {
+            addNewItem.hide();
+        }
         if (searchView != null) {
             searchView.setQuery(null, false);
             searchView.clearFocus();
@@ -289,8 +351,11 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
     }
 
     private void saveAsJson(OutputStream os) throws JSONException, IOException {
-        String jsonString = EditorUtils.getJson(adapter.getAllItems(), adapter instanceof SettingsRecyclerAdapter ?
-                ((SettingsRecyclerAdapter) adapter).getSettingsType() : null);
+        String jsonString = EditorUtils.getJson(
+                adapter.getAllItems(),
+                adapter instanceof SettingsRecyclerAdapter
+                        ? ((SettingsRecyclerAdapter) adapter).getSettingsType()
+                        : null);
         os.write(jsonString.getBytes());
     }
 }

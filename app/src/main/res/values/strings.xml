@@ -14,6 +14,7 @@
     <string name="linux_environment">Linux Environments</string>
     <string name="startup_warning"><b>Warning!</b> We do not guarantee that problems caused by the improper use of this utility can be fixed, and we are unable to help you with any such problems. We support only this app, not your device.</string>
     <string name="save_as_json">Save as JSON</string>
+    <string name="export_change_log">Export settings change log</string>
     <string name="new_item">New Item</string>
     <string name="close">Close</string>
     <string name="value">Value</string>

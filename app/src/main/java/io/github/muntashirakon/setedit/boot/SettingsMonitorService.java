@@ -53,10 +53,15 @@ public class SettingsMonitorService extends Service {
     private final Runnable watchdog = new Runnable() {
         @Override
         public void run() {
-            executor.execute(() -> applyAllLockedSettings(false));
-            if (handler != null) {
-                handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
-            }
+            executor.execute(() -> {
+                // Full snapshot diff catches new/deleted/transient keys even when Android does not
+                // give us a key-specific ContentObserver callback.
+                SettingsChangeLogger.scanAll(SettingsMonitorService.this);
+                // The watchdog path deliberately uses the same 500 ms correction delay requested
+                // for observer events. Maximum fallback detection time is roughly 5.5 seconds.
+                applyAllLockedSettings(false);
+            });
+            if (handler != null) handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
         }
     };
 
@@ -67,8 +72,8 @@ public class SettingsMonitorService extends Service {
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Settings Monitor Active")
-                .setContentText("Enforcing locked settings")
+                .setContentTitle("Settings Guardian Active")
+                .setContentText("Enforcing locks and learning setting changes")
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setOngoing(true)
                 .build();
@@ -89,12 +94,14 @@ public class SettingsMonitorService extends Service {
         getContentResolver().registerContentObserver(Settings.Secure.CONTENT_URI, true, secureObserver);
         getContentResolver().registerContentObserver(Settings.Global.CONTENT_URI, true, globalObserver);
 
-        // Enforce all saved locks immediately instead of waiting for the first observer event.
-        executor.execute(() -> applyAllLockedSettings(true));
+        executor.execute(() -> {
+            SettingsChangeLogger.initialize(SettingsMonitorService.this);
+            applyAllLockedSettings(true);
+        });
         handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
 
-        // If Shizuku/Shizuku+ reconnects after this service has already started, force all
-        // locks again immediately. The watchdog remains as a fallback for missed events.
+        // Shizuku+ intentionally exposes the normal Shizuku client API through its compatibility
+        // layer. When that binder arrives or reconnects, immediately reassert every saved lock.
         shizukuListener = () -> executor.execute(() -> applyAllLockedSettings(true));
         try {
             Shizuku.addBinderReceivedListenerSticky(shizukuListener);
@@ -142,13 +149,13 @@ public class SettingsMonitorService extends Service {
     }
 
     private void createNotificationChannel() {
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-        NotificationChannelCompat notificationChannel = new NotificationChannelCompat.Builder(
+        NotificationManagerCompat manager = NotificationManagerCompat.from(this);
+        NotificationChannelCompat channel = new NotificationChannelCompat.Builder(
                 NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_MIN)
                 .setVibrationEnabled(false)
-                .setName("Settings Monitor")
+                .setName("Settings Guardian")
                 .build();
-        notificationManager.createNotificationChannel(notificationChannel);
+        manager.createNotificationChannel(channel);
     }
 
     private class SettingsObserver extends ContentObserver {
@@ -164,11 +171,24 @@ public class SettingsMonitorService extends Service {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             super.onChange(selfChange, uri);
-            if (uri == null) return;
+
+            if (uri == null) {
+                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                return;
+            }
 
             String key = uri.getLastPathSegment();
-            if (key == null || key.isEmpty()) return;
+            if (key == null || key.isEmpty() || settingsType.equals(key)) {
+                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                return;
+            }
 
+            // Capture Android's new value before Guardian puts a locked value back. This is what
+            // lets Game Mode and similar OEM features teach the catalog about hidden values.
+            executor.execute(() -> SettingsChangeLogger.captureKey(
+                    SettingsMonitorService.this, settingsType, key));
+
+            // Fast enforcement path: a real observer event gets corrected after 500 ms.
             checkAndScheduleSettingRevert(key, settingsType, tableType, true);
         }
     }
@@ -187,18 +207,23 @@ public class SettingsMonitorService extends Service {
             String savedValue = String.valueOf(entry.getValue());
 
             if (TableType.TABLE_SYSTEM.equals(tableType)) {
-                checkAndScheduleSettingRevert(key, SettingsType.SYSTEM_SETTINGS, tableType, !immediate);
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.SYSTEM_SETTINGS, tableType, !immediate);
             } else if (TableType.TABLE_SECURE.equals(tableType)) {
-                checkAndScheduleSettingRevert(key, SettingsType.SECURE_SETTINGS, tableType, !immediate);
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.SECURE_SETTINGS, tableType, !immediate);
             } else if (TableType.TABLE_GLOBAL.equals(tableType)) {
-                checkAndScheduleSettingRevert(key, SettingsType.GLOBAL_SETTINGS, tableType, !immediate);
+                checkAndScheduleSettingRevert(
+                        key, SettingsType.GLOBAL_SETTINGS, tableType, !immediate);
             } else if (TableType.TABLE_PROPERTIES.equals(tableType)) {
                 checkAndSchedulePropertyRevert(key, savedValue, !immediate);
             }
         }
     }
 
-    private void checkAndScheduleSettingRevert(String key, String settingsType, String tableType,
+    private void checkAndScheduleSettingRevert(String key,
+                                               String settingsType,
+                                               String tableType,
                                                boolean delayed) {
         SharedPreferences lockedPrefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
         String savedValue;
@@ -225,16 +250,23 @@ public class SettingsMonitorService extends Service {
                 }
                 if (latestSavedValue == null) return;
 
-                String latestValue = readSetting(settingsType, key);
-                if (latestSavedValue.equals(latestValue)) return;
+                String displacedValue = readSetting(settingsType, key);
+                if (latestSavedValue.equals(displacedValue)) return;
 
                 ActionResult result = SettingsUtils.update(
                         SettingsMonitorService.this, settingsType, key, latestSavedValue);
                 if (!result.successful) {
                     Log.e(TAG, "Failed to revert locked setting " + key + ": " + result.getLogs());
-                } else {
-                    Log.i(TAG, "Reverted locked setting " + key + " to " + latestSavedValue);
+                    return;
                 }
+
+                SettingsChangeLogger.recordGuardianRestore(
+                        SettingsMonitorService.this,
+                        settingsType,
+                        key,
+                        displacedValue,
+                        latestSavedValue);
+                Log.i(TAG, "Reverted locked setting " + key + " to " + latestSavedValue);
             });
         };
 
@@ -252,7 +284,8 @@ public class SettingsMonitorService extends Service {
                 SharedPreferences prefs = getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
                 String latestSavedValue;
                 try {
-                    latestSavedValue = prefs.getString(key + ":" + TableType.TABLE_PROPERTIES, null);
+                    latestSavedValue = prefs.getString(
+                            key + ":" + TableType.TABLE_PROPERTIES, null);
                 } catch (ClassCastException e) {
                     latestSavedValue = null;
                 }
@@ -275,7 +308,6 @@ public class SettingsMonitorService extends Service {
 
     private void scheduleRevert(String pendingKey, Runnable replacement, long delayMs) {
         if (handler == null) return;
-
         Runnable old = pendingReverts.put(pendingKey, replacement);
         if (old != null) handler.removeCallbacks(old);
         handler.postDelayed(replacement, delayMs);

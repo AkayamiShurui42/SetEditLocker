@@ -2,6 +2,7 @@ package io.github.muntashirakon.setedit.adapters;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.text.Editable;
 import android.view.LayoutInflater;
@@ -12,7 +13,6 @@ import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Filter;
 import android.widget.TextView;
-import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -23,17 +23,22 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.textfield.TextInputEditText;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.github.muntashirakon.setedit.EditorUtils;
 import io.github.muntashirakon.setedit.R;
 import io.github.muntashirakon.setedit.TableTypeInt;
 import io.github.muntashirakon.setedit.boot.ActionItem;
 import io.github.muntashirakon.setedit.boot.BootUtils;
+import io.github.muntashirakon.setedit.boot.SettingsDiscoveryCatalog;
+import io.github.muntashirakon.setedit.boot.SettingsMonitorService;
 import io.github.muntashirakon.setedit.shortcut.ShortcutUtils;
 import io.github.muntashirakon.setedit.utils.ActionResult;
+import io.github.muntashirakon.setedit.utils.PrivilegeBridge;
 
 public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecyclerAdapter.ViewHolder> {
     protected final FragmentActivity context;
@@ -82,17 +87,14 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
     }
 
     public boolean canLock() {
-        if (Boolean.TRUE.equals(com.topjohnwu.superuser.Shell.isAppGrantedRoot())) {
-            return true;
-        }
-        if (rikka.shizuku.Shizuku.pingBinder() && rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
+        if (PrivilegeBridge.canUsePrivilegedShell()) return true;
         if (getListType() == TableTypeInt.TABLE_SECURE || getListType() == TableTypeInt.TABLE_GLOBAL) {
-            return androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_SECURE_SETTINGS) == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            return ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_SECURE_SETTINGS)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED;
         }
         if (getListType() == TableTypeInt.TABLE_SYSTEM) {
-            return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && android.provider.Settings.System.canWrite(context);
+            return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+                    && android.provider.Settings.System.canWrite(context);
         }
         return false;
     }
@@ -132,7 +134,9 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
     private void onBindViewHolder(@NonNull ViewHolder holder, String keyName, String keyValue, int position) {
         holder.keyName.setText(keyName);
         holder.keyValue.setText(keyValue);
-        holder.itemView.setBackgroundColor(ContextCompat.getColor(context, position % 2 == 1 ? android.R.color.transparent : R.color.semi_transparent));
+        holder.itemView.setBackgroundColor(ContextCompat.getColor(
+                context,
+                position % 2 == 1 ? android.R.color.transparent : R.color.semi_transparent));
         holder.itemView.setOnClickListener(v -> onClickItem(v, keyName, keyValue, position));
     }
 
@@ -141,18 +145,33 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
         v.findViewById(R.id.button_help).setOnClickListener(v2 -> openHelp(keyName));
         ((TextView) v.findViewById(R.id.title)).setText(keyName);
         AutoCompleteTextView editText = v.findViewById(R.id.txt);
-        MaterialCheckBox performOnReboot = v.findViewById(R.id.checkbox);
         MaterialCheckBox performViaShortcut = v.findViewById(R.id.checkbox_2);
         MaterialCheckBox performLock = v.findViewById(R.id.checkbox_lock);
+
+        String tableType = EditorUtils.toTableType(getListType());
         SharedPreferences lockedPrefs = context.getSharedPreferences("locked_settings", Context.MODE_PRIVATE);
-        boolean isLocked = lockedPrefs.contains(keyName + ":" + EditorUtils.toTableType(getListType()));
+        boolean isLocked = lockedPrefs.contains(keyName + ":" + tableType);
         performLock.setChecked(isLocked);
 
         SharedPreferences prefs = context.getSharedPreferences("value_history_" + keyName, Context.MODE_PRIVATE);
         String historyStr = prefs.getString("history", "");
         String[] history = historyStr.isEmpty() ? new String[]{} : historyStr.split("\n");
-        ArrayAdapter<String> historyAdapter = new ArrayAdapter<>(context, android.R.layout.simple_dropdown_item_1line, history);
+
+        Set<String> valueSuggestions = new LinkedHashSet<>();
+        for (String historyValue : history) {
+            if (!historyValue.isEmpty()) valueSuggestions.add(historyValue);
+        }
+        if (this instanceof SettingsRecyclerAdapter) {
+            String settingsType = ((SettingsRecyclerAdapter) this).getSettingsType();
+            valueSuggestions.addAll(SettingsDiscoveryCatalog.getValues(context, settingsType, keyName));
+        }
+        ArrayAdapter<String> historyAdapter = new ArrayAdapter<>(
+                context,
+                android.R.layout.simple_dropdown_item_1line,
+                new ArrayList<>(valueSuggestions));
         editText.setAdapter(historyAdapter);
+        editText.setThreshold(0);
+        editText.setOnClickListener(clicked -> editText.showDropDown());
 
         boolean canEdit = canEdit();
         boolean canDelete = canDelete();
@@ -160,67 +179,65 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context)
                 .setView(v)
                 .setNegativeButton(R.string.close, null);
-        if (canSetOnReboot() && (canEdit || canDelete)) {
-            performOnReboot.setVisibility(View.VISIBLE);
-        } else performOnReboot.setVisibility(View.GONE);
+
         if (canCreateShortcut() && (canEdit || canDelete)) {
             performViaShortcut.setVisibility(View.VISIBLE);
-        } else performViaShortcut.setVisibility(View.GONE);
+        } else {
+            performViaShortcut.setVisibility(View.GONE);
+        }
         if (canLock() && (canEdit || canDelete)) {
             performLock.setVisibility(View.VISIBLE);
         } else {
             performLock.setVisibility(View.GONE);
             performLock.setChecked(false);
         }
+
         if (canEdit) {
             builder.setPositiveButton(R.string.save, (dialog, which) -> {
                 Editable editable = editText.getText();
                 if (editable == null) return;
                 String newValue = editable.toString();
 
-                SharedPreferences.Editor editor = prefs.edit();
+                SharedPreferences.Editor historyEditor = prefs.edit();
                 if (!historyStr.contains(newValue) && !newValue.isEmpty() && !newValue.equals("null")) {
-                    editor.putString("history", newValue + "\n" + historyStr).apply();
-                }
-
-                if (performLock.isChecked()) {
-                    lockedPrefs.edit().putString(keyName + ":" + EditorUtils.toTableType(getListType()), newValue).apply();
-                    try {
-                        Intent serviceIntent = new Intent(context, io.github.muntashirakon.setedit.boot.SettingsMonitorService.class);
-                        context.startService(serviceIntent);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    lockedPrefs.edit().remove(keyName + ":" + EditorUtils.toTableType(getListType())).apply();
+                    historyEditor.putString("history", newValue + "\n" + historyStr).apply();
                 }
 
                 update(keyName, newValue);
-                if (canSetOnReboot() && performOnReboot.isChecked()) {
-                    ActionItem actionItem = new ActionItem(ActionResult.TYPE_UPDATE, EditorUtils.toTableType(getListType()), keyName, editable.toString());
-                    BootUtils.add(context, actionItem);
+
+                if (performLock.isChecked()) {
+                    lockedPrefs.edit().putString(keyName + ":" + tableType, newValue).apply();
+                    BootUtils.add(context, new ActionItem(
+                            ActionResult.TYPE_UPDATE, tableType, keyName, newValue));
+                    startGuardian();
+                } else {
+                    lockedPrefs.edit().remove(keyName + ":" + tableType).apply();
+                    BootUtils.delete(context, tableType, keyName);
                 }
+
                 if (canCreateShortcut() && performViaShortcut.isChecked()) {
-                    ActionItem actionItem = new ActionItem(ActionResult.TYPE_UPDATE, EditorUtils.toTableType(getListType()), keyName, editable.toString());
+                    ActionItem actionItem = new ActionItem(
+                            ActionResult.TYPE_UPDATE, tableType, keyName, newValue);
                     ShortcutUtils.displayShortcutTypeChooserDialog(context, actionItem);
                 }
             });
         } else {
             editText.setKeyListener(null);
         }
+
         if (canDelete) {
             builder.setNeutralButton(R.string.delete, (dialog, which) -> {
                 delete(keyName);
-                if (canSetOnReboot() && performOnReboot.isChecked()) {
-                    ActionItem actionItem = new ActionItem(ActionResult.TYPE_DELETE, EditorUtils.toTableType(getListType()), keyName, null);
-                    BootUtils.add(context, actionItem);
-                }
+                lockedPrefs.edit().remove(keyName + ":" + tableType).apply();
+                BootUtils.delete(context, tableType, keyName);
                 if (canCreateShortcut() && performViaShortcut.isChecked()) {
-                    ActionItem actionItem = new ActionItem(ActionResult.TYPE_DELETE, EditorUtils.toTableType(getListType()), keyName, null);
+                    ActionItem actionItem = new ActionItem(
+                            ActionResult.TYPE_DELETE, tableType, keyName, null);
                     ShortcutUtils.displayShortcutTypeChooserDialog(context, actionItem);
                 }
             });
         }
+
         AlertDialog dialog = builder.create();
         dialog.setOnShowListener(dialogInterface -> {
             if (canEdit()) {
@@ -230,12 +247,23 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
                     editText.setSelection(0, keyValue.length());
                 }
                 editText.postDelayed(() -> {
-                    InputMethodManager imm = (InputMethodManager) editText.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    InputMethodManager imm = (InputMethodManager) editText.getContext()
+                            .getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT);
                 }, 200);
             }
         });
         dialog.show();
+    }
+
+    private void startGuardian() {
+        try {
+            ContextCompat.startForegroundService(
+                    context,
+                    new Intent(context, SettingsMonitorService.class));
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     protected void setMessage(CharSequence charSequence) {
@@ -268,7 +296,6 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
                 str = "environment \"";
                 break;
             default:
-                // Unsupported
                 return;
         }
         sb.append(str);

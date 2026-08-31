@@ -9,17 +9,14 @@ import androidx.annotation.NonNull;
 
 import com.topjohnwu.superuser.Shell;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.lang.reflect.Method;
-
 import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuPlusAPI;
 
 /**
  * Centralized privileged-operation bridge used by SetEditLocker.
  *
- * Shizuku+ intentionally preserves the regular rikka.shizuku client API through
- * its compatibility layer, so the app does not need a Plus-specific dependency.
+ * The Shizuku+ API keeps stock Shizuku/Sui compatibility, while using the Plus
+ * server's native client/provider path when Shizuku+ is installed.
  */
 public final class PrivilegeBridge {
     private static final String TAG = "PrivilegeBridge";
@@ -85,25 +82,15 @@ public final class PrivilegeBridge {
         }
 
         try {
-            // newProcess remains available in Shizuku API 13 and in Shizuku+ compatibility mode.
-            // Keep reflection isolated here so the rest of the app is not coupled to that API.
-            Method method = Shizuku.class.getDeclaredMethod(
-                    "newProcess", String[].class, String[].class, String.class);
-            method.setAccessible(true);
-            Process process = (Process) method.invoke(null, command, null, null);
-            int exitCode = process.waitFor();
-            ActionResult result = new ActionResult(actionType, exitCode == 0);
-            if (exitCode != 0) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                StringBuilder error = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (error.length() > 0) error.append('\n');
-                    error.append(line);
-                }
-                result.setLogs(error.length() == 0
-                        ? "Privileged command exited with code " + exitCode
-                        : error.toString());
+            // The Plus API accepts an argument array, avoids shell quoting, and internally
+            // retains the standard Shizuku fallback when connected to a non-Plus server.
+            ShizukuPlusAPI.CommandResult commandResult = ShizukuPlusAPI.executeShell(command);
+            ActionResult result = new ActionResult(actionType, commandResult.isSuccess());
+            if (!commandResult.isSuccess()) {
+                String error = !TextUtils.isEmpty(commandResult.error)
+                        ? commandResult.error
+                        : "Privileged command exited with code " + commandResult.exitCode;
+                result.setLogs(error);
             }
             return result;
         } catch (Throwable t) {

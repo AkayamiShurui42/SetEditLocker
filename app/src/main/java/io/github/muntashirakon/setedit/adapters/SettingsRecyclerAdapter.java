@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.github.muntashirakon.setedit.R;
 import io.github.muntashirakon.setedit.SettingsType;
@@ -28,6 +30,7 @@ import io.github.muntashirakon.setedit.utils.SettingsUtils;
 
 public class SettingsRecyclerAdapter extends AbsRecyclerAdapter {
     public static final String[] columns = {"_id", "name", "value"};
+    private static final ExecutorService SETTINGS_OPERATIONS = Executors.newSingleThreadExecutor();
 
     @SettingsType
     private final String mSettingsType;
@@ -107,41 +110,39 @@ public class SettingsRecyclerAdapter extends AbsRecyclerAdapter {
 
     @Override
     public void create(String keyName, String newValue) {
-        ActionResult result = SettingsUtils.create(context, mSettingsType, keyName, newValue);
-        if (result.successful) {
-            refresh();
-        } else {
-            String logs = result.getLogs() != null ? result.getLogs() : "Permission denied or operation failed.";
-            setMessage(new SpannableStringBuilder(context.getText(R.string.error_unexpected))
-                    .append(" ")
-                    .append(logs));
-        }
+        runOperation(() -> SettingsUtils.create(context, mSettingsType, keyName, newValue));
     }
 
     @Override
     public void update(String keyName, String newValue) {
-        ActionResult result = SettingsUtils.update(context, mSettingsType, keyName, newValue);
-        if (result.successful) {
-            refresh();
-        } else {
-            String logs = result.getLogs() != null ? result.getLogs() : "Permission denied or operation failed.";
-            setMessage(new SpannableStringBuilder(context.getText(R.string.error_unexpected))
-                    .append(" ")
-                    .append(logs));
-        }
+        runOperation(() -> SettingsUtils.update(context, mSettingsType, keyName, newValue));
     }
 
     @Override
     public void delete(String keyName) {
-        ActionResult result = SettingsUtils.delete(context, mSettingsType, keyName);
-        if (result.successful) {
-            refresh();
-        } else {
-            String logs = result.getLogs() != null ? result.getLogs() : "Permission denied or operation failed.";
-            setMessage(new SpannableStringBuilder(context.getText(R.string.error_unexpected))
-                    .append(" ")
-                    .append(logs));
-        }
+        runOperation(() -> SettingsUtils.delete(context, mSettingsType, keyName));
+    }
+
+    private void runOperation(@NonNull Operation operation) {
+        SETTINGS_OPERATIONS.execute(() -> {
+            ActionResult result = operation.run();
+            context.runOnUiThread(() -> {
+                if (result.successful) {
+                    refresh();
+                } else {
+                    String logs = result.getLogs() != null
+                            ? result.getLogs()
+                            : "Permission denied or operation failed.";
+                    setMessage(new SpannableStringBuilder(context.getText(R.string.error_unexpected))
+                            .append(" ")
+                            .append(logs));
+                }
+            });
+        });
+    }
+
+    private interface Operation {
+        ActionResult run();
     }
 
     @Override

@@ -13,6 +13,10 @@
         android:title="@string/save_as_json" />
 
     <item
+        android:id="@+id/action_export_change_log"
+        android:title="@string/export_change_log" />
+
+    <item
         android:id="@+id/action_theme"
         android:title="@string/theme" />
 </menu>

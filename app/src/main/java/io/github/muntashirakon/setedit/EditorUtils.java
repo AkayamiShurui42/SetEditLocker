@@ -24,23 +24,35 @@ import com.topjohnwu.superuser.Shell;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import rikka.shizuku.Shizuku;
-
 import java.util.List;
+
+import io.github.muntashirakon.setedit.utils.PrivilegeBridge;
 
 public class EditorUtils {
     /**
-     * Check whether the permission has been granted
+     * Check whether the app can write the selected settings table.
      *
-     * @return {@code true} if granted, {@code null} if is being granted and {@code false} otherwise
+     * @return true if granted, null if a user-facing permission request is pending,
+     * false otherwise.
      */
     @Nullable
     public static Boolean checkSettingsPermission(@NonNull Context context, @SettingsType String settingsType) {
         String permission = SettingsType.SYSTEM_SETTINGS.equals(settingsType)
                 ? Manifest.permission.WRITE_SETTINGS : Manifest.permission.WRITE_SECURE_SETTINGS;
+
+        // Shizuku/Shizuku+ is preferred when available because SettingsUtils can execute
+        // the settings command directly through the privileged service.
+        if (PrivilegeBridge.hasShizukuPermission()) {
+            return true;
+        }
+        if (PrivilegeBridge.isShizukuRunning() && context instanceof android.app.Activity) {
+            PrivilegeBridge.requestShizukuPermissionIfNeeded((android.app.Activity) context);
+            return null;
+        }
+
         if (SettingsType.SYSTEM_SETTINGS.equals(settingsType)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(context)) {
-                if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
+                if (PrivilegeBridge.isRootGranted()) {
                     Shell.cmd("appops set " + Process.myUid() + " 23 0",
                             "appops set " + BuildConfig.APPLICATION_ID + " 23 0").exec();
                 }
@@ -58,20 +70,10 @@ public class EditorUtils {
                     return null;
                 }
             }
-        } else if (Boolean.TRUE.equals(Shell.isAppGrantedRoot())) {
+        } else if (PrivilegeBridge.isRootGranted()) {
             Shell.cmd("pm grant " + BuildConfig.APPLICATION_ID + " " + permission).exec();
         }
-        if (Shizuku.pingBinder()) {
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                return true;
-            } else {
-                try {
-                    Shizuku.requestPermission(0);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
     }
 

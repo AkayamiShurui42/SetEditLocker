@@ -43,4 +43,11 @@
     <string name="delete_shortcut_title">Delete shortcut</string>
     <string name="delete_shortcut_message">SetEdit cannot delete a shortcut automatically. To delete the shortcut, you must remove it from the launcher where it was originally added.</string>
     <string name="drag_item">Drag item</string>
+
+    <string name="shizuku_setup_title">Shizuku connection</string>
+    <string name="open_shizuku">Open Shizuku</string>
+    <string name="unknown_version">unknown version</string>
+    <string name="shizuku_plus_compat_missing">Shizuku+ %1$s is installed, but its Compat Hub companion is missing. Open Shizuku+, make sure the service is running, then install the Compat Hub from the Shizuku+ home screen. SetEditLocker uses that supported compatibility bridge.</string>
+    <string name="shizuku_plus_not_connected">Shizuku+ %1$s and its stock-compatible bridge are installed, but SetEditLocker has not received a live Shizuku binder. Make sure the Shizuku+ service is running and up to date, then reopen SetEditLocker.</string>
+    <string name="shizuku_not_connected">Shizuku is installed, but SetEditLocker has not received a live binder. Start the Shizuku service, then reopen SetEditLocker.</string>
 </resources>

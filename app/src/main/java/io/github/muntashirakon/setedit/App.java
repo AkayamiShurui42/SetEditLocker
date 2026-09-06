@@ -2,6 +2,9 @@ package io.github.muntashirakon.setedit;
 
 import android.app.Activity;
 import android.app.Application;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
 
@@ -9,10 +12,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.WindowCompat;
 
-import android.content.Intent;
-import android.os.Build;
 import com.google.android.material.color.DynamicColors;
 import com.topjohnwu.superuser.Shell;
+
+import io.github.muntashirakon.setedit.utils.PrivilegeBridge;
+import rikka.shizuku.Shizuku;
 
 public class App extends Application {
     static {
@@ -31,6 +35,21 @@ public class App extends Application {
         DynamicColors.applyToActivitiesIfAvailable(this);
         registerActivityLifecycleCallbacks(new ActivityAppearanceCallback());
         Shell.getShell();
+
+        // Warm the privileged command UserService as soon as Shizuku is available. This keeps
+        // settings edits and Guardian writes off the deprecated Shizuku.newProcess() path.
+        Shizuku.addBinderReceivedListenerSticky(() -> {
+            if (PrivilegeBridge.hasShizukuPermission()) {
+                PrivilegeBridge.initializeShizukuUserService();
+            }
+        });
+        Shizuku.addBinderDeadListener(PrivilegeBridge::onShizukuBinderDead);
+        Shizuku.addRequestPermissionResultListener((requestCode, grantResult) -> {
+            if (requestCode == PrivilegeBridge.REQUEST_CODE_SHIZUKU
+                    && grantResult == PackageManager.PERMISSION_GRANTED) {
+                PrivilegeBridge.initializeShizukuUserService();
+            }
+        });
 
         Intent intent = new Intent(this, io.github.muntashirakon.setedit.boot.SettingsMonitorService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

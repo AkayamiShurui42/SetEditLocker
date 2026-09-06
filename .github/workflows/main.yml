@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: v1.0.0-beta.${{ github.run_number }}
 
     steps:
     - uses: actions/checkout@v4
@@ -36,13 +38,20 @@ jobs:
         name: app-debug
         path: app/build/outputs/apk/debug/app-debug.apk
 
-    - name: Create Release
+    - name: Create Draft Beta Release
       if: github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.0.0-beta.${{ github.run_number }}
-        name: Beta Release v1.0.0-beta.${{ github.run_number }}
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: Beta Release ${{ env.RELEASE_TAG }}
         files: app/build/outputs/apk/debug/app-debug.apk
+        draft: true
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Publish Beta Release
+      if: github.ref == 'refs/heads/master'
+      run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

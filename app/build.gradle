@@ -10,8 +10,8 @@ android {
         applicationId "io.github.muntashirakon.setedit"
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "3.1"
+        versionCode 11
+        versionName "3.2"
         resConfig "en"
     }
 
@@ -70,8 +70,8 @@ dependencies {
     implementation 'me.zhanghai.android.fastscroll:library:1.3.0'
     implementation 'com.github.topjohnwu.libsu:core:5.2.2'
 
-    // Stable public client API. SetEditLocker supplies its own dual-format provider
-    // so the same client can receive binders directly from native Shizuku+ or stock Shizuku.
+    // Stable Shizuku client API/provider. Native Shizuku+ exposes stock-client compatibility
+    // through its Compat Hub; the Shizuku+ Drop-In build is stock-compatible directly.
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 }

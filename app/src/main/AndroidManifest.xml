@@ -17,16 +17,22 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
 
+    <!-- Shizuku+ native permission plus the stock/Compat Hub permission. -->
+    <uses-permission android:name="af.shizuku.plus.permission.API_V23" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
+    <!-- Android 11+ package visibility for diagnostics and manager launching. -->
+    <queries>
+        <package android:name="af.shizuku.plus.api" />
+        <package android:name="moe.shizuku.privileged.api" />
+    </queries>
+
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
-
-    <!-- Native Shizuku+ and stock/drop-in Shizuku discovery. -->
-    <uses-permission android:name="af.shizuku.plus.permission.API_V23" />
-    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
         android:name=".App"
@@ -76,8 +82,13 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Setting management" />
         </service>
 
+        <!--
+            Use the stable Shizuku client provider exactly as documented upstream.
+            Native Shizuku+ should expose stock-client compatibility through its bundled
+            Compat Hub (moe.shizuku.privileged.api), or users can install the Drop-In build.
+        -->
         <provider
-            android:name="rikka.shizuku.SetEditShizukuProvider"
+            android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"

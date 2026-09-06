@@ -1,11 +1,15 @@
 package io.github.muntashirakon.setedit.utils;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.topjohnwu.superuser.Shell;
 
@@ -19,12 +23,16 @@ import rikka.shizuku.Shizuku;
 /**
  * Centralized privileged-operation bridge used by SetEditLocker.
  *
- * SetEditLocker's provider accepts both native Shizuku+ and stock Shizuku binder
- * payloads. Once attached, both use the stable Rikka client API here.
+ * Stock Shizuku clients are also the officially supported compatibility path for
+ * Shizuku+: the normal Plus build uses its Compat Hub, while the Drop-In build
+ * already owns the stock Shizuku package name.
  */
 public final class PrivilegeBridge {
     private static final String TAG = "PrivilegeBridge";
     public static final int REQUEST_CODE_SHIZUKU = 1001;
+
+    public static final String SHIZUKU_PLUS_PACKAGE = "af.shizuku.plus.api";
+    public static final String STOCK_OR_COMPAT_PACKAGE = "moe.shizuku.privileged.api";
 
     private PrivilegeBridge() {
     }
@@ -68,6 +76,53 @@ public final class PrivilegeBridge {
         }
     }
 
+    public static boolean isNativeShizukuPlusInstalled(@NonNull Context context) {
+        return isPackageInstalled(context, SHIZUKU_PLUS_PACKAGE);
+    }
+
+    public static boolean isStockOrCompatInstalled(@NonNull Context context) {
+        return isPackageInstalled(context, STOCK_OR_COMPAT_PACKAGE);
+    }
+
+    @Nullable
+    public static String getShizukuPlusVersion(@NonNull Context context) {
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(SHIZUKU_PLUS_PACKAGE, 0);
+            return info.versionName;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public static boolean openShizukuManager(@NonNull Context context) {
+        String[] packages = new String[]{SHIZUKU_PLUS_PACKAGE, STOCK_OR_COMPAT_PACKAGE};
+        for (String packageName : packages) {
+            try {
+                Intent launch = context.getPackageManager().getLaunchIntentForPackage(packageName);
+                if (launch != null) {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(launch);
+                    return true;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Unable to open " + packageName, t);
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPackageInstalled(@NonNull Context context, @NonNull String packageName) {
+        try {
+            context.getPackageManager().getPackageInfo(packageName, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } catch (Throwable t) {
+            Log.w(TAG, "Unable to inspect package " + packageName, t);
+            return false;
+        }
+    }
+
     @NonNull
     public static ActionResult execute(@ActionResult.ActionType int actionType,
                                        @NonNull String... command) {
@@ -86,8 +141,8 @@ public final class PrivilegeBridge {
         }
 
         try {
-            // API 13.1.5 keeps newProcess private. Isolate reflective access here rather
-            // than coupling the rest of SetEditLocker to a private Shizuku method.
+            // API 13.1.5 keeps newProcess private. Keep this path isolated so it can be
+            // replaced by a UserService without coupling the rest of SetEditLocker to it.
             Method method = Shizuku.class.getDeclaredMethod(
                     "newProcess", String[].class, String[].class, String.class);
             method.setAccessible(true);

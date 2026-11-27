@@ -32,6 +32,7 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import com.google.android.material.textfield.TextInputLayout;
 
 import org.json.JSONException;
 
@@ -47,6 +48,7 @@ import java.util.Set;
 import io.github.muntashirakon.setedit.adapters.AbsRecyclerAdapter;
 import io.github.muntashirakon.setedit.adapters.AdapterProvider;
 import io.github.muntashirakon.setedit.adapters.KnownKeys;
+import io.github.muntashirakon.setedit.adapters.ObservedValuesAdapter;
 import io.github.muntashirakon.setedit.adapters.SettingsRecyclerAdapter;
 import io.github.muntashirakon.setedit.boot.ActionItem;
 import io.github.muntashirakon.setedit.boot.BootUtils;
@@ -134,6 +136,10 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
         }
 
         configureSettingSuggestions(keyNameView, keyValueView);
+        if (adapter instanceof SettingsRecyclerAdapter) {
+            TextInputLayout valueLayout = editorDialogView.findViewById(R.id.value_input_layout);
+            valueLayout.setHelperText(getString(R.string.observed_values_helper));
+        }
         keyNameView.requestFocus();
 
         new MaterialAlertDialogBuilder(this)
@@ -199,10 +205,7 @@ public class EditorActivity extends AppCompatActivity implements AdapterView.OnI
             Editable editable = keyNameView.getText();
             String key = editable != null ? editable.toString() : "";
             List<String> observedValues = SettingsDiscoveryCatalog.getValues(this, settingsType, key);
-            keyValueView.setAdapter(new ArrayAdapter<>(
-                    this,
-                    android.R.layout.simple_dropdown_item_1line,
-                    observedValues));
+            keyValueView.setAdapter(new ObservedValuesAdapter(this, observedValues));
             keyValueView.setThreshold(0);
         };
 

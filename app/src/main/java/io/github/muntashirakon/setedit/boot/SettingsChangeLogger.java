@@ -45,12 +45,19 @@ public final class SettingsChangeLogger {
             Map<String, String> system = readTable(context, SettingsType.SYSTEM_SETTINGS);
             Map<String, String> secure = readTable(context, SettingsType.SECURE_SETTINGS);
             Map<String, String> global = readTable(context, SettingsType.GLOBAL_SETTINGS);
-            snapshots.put(SettingsType.SYSTEM_SETTINGS, system);
-            snapshots.put(SettingsType.SECURE_SETTINGS, secure);
-            snapshots.put(SettingsType.GLOBAL_SETTINGS, global);
-            recordTableInCatalog(context, SettingsType.SYSTEM_SETTINGS, system);
-            recordTableInCatalog(context, SettingsType.SECURE_SETTINGS, secure);
-            recordTableInCatalog(context, SettingsType.GLOBAL_SETTINGS, global);
+            snapshots.clear();
+            if (system != null) {
+                snapshots.put(SettingsType.SYSTEM_SETTINGS, system);
+                recordTableInCatalog(context, SettingsType.SYSTEM_SETTINGS, system);
+            }
+            if (secure != null) {
+                snapshots.put(SettingsType.SECURE_SETTINGS, secure);
+                recordTableInCatalog(context, SettingsType.SECURE_SETTINGS, secure);
+            }
+            if (global != null) {
+                snapshots.put(SettingsType.GLOBAL_SETTINGS, global);
+                recordTableInCatalog(context, SettingsType.GLOBAL_SETTINGS, global);
+            }
             initialized = true;
         }
     }
@@ -105,8 +112,9 @@ public final class SettingsChangeLogger {
                                              @Nullable String displacedValue,
                                              @NonNull String lockedValue) {
         synchronized (LOCK) {
+            // The displaced value was actually observed before this app restored
+            // the lock. Do not label our own forced value as an external discovery.
             SettingsDiscoveryCatalog.record(context, settingsType, key, displacedValue);
-            SettingsDiscoveryCatalog.record(context, settingsType, key, lockedValue);
             appendChange(context, settingsType, key, displacedValue, lockedValue,
                     "guardian_restore", "guardian");
             Map<String, String> table = snapshots.get(settingsType);
@@ -141,9 +149,18 @@ public final class SettingsChangeLogger {
     private static void scanTableLocked(@NonNull Context context,
                                         @NonNull String settingsType,
                                         @NonNull String source) {
-        Map<String, String> oldTable = snapshots.get(settingsType);
-        if (oldTable == null) oldTable = new HashMap<>();
         Map<String, String> newTable = readTable(context, settingsType);
+        if (newTable == null) {
+            // A failed provider query must never look like every key was deleted.
+            return;
+        }
+        Map<String, String> oldTable = snapshots.get(settingsType);
+        if (oldTable == null) {
+            // First readable snapshot after an earlier query failure is a baseline.
+            snapshots.put(settingsType, newTable);
+            recordTableInCatalog(context, settingsType, newTable);
+            return;
+        }
         recordTableInCatalog(context, settingsType, newTable);
 
         Set<String> keys = new HashSet<>();
@@ -176,7 +193,7 @@ public final class SettingsChangeLogger {
         }
     }
 
-    @NonNull
+    @Nullable
     private static Map<String, String> readTable(@NonNull Context context,
                                                  @NonNull String settingsType) {
         Map<String, String> values = new HashMap<>();
@@ -185,18 +202,18 @@ public final class SettingsChangeLogger {
             ContentResolver resolver = context.getContentResolver();
             cursor = resolver.query(Uri.parse("content://settings/" + settingsType),
                     new String[]{"name", "value"}, null, null, null);
-            if (cursor != null) {
-                int nameIndex = cursor.getColumnIndex("name");
-                int valueIndex = cursor.getColumnIndex("value");
-                while (cursor.moveToNext()) {
-                    String key = nameIndex >= 0 ? cursor.getString(nameIndex) : null;
-                    if (key == null) continue;
-                    String value = valueIndex >= 0 ? cursor.getString(valueIndex) : null;
-                    values.put(key, value);
-                }
+            if (cursor == null) return null;
+            int nameIndex = cursor.getColumnIndex("name");
+            int valueIndex = cursor.getColumnIndex("value");
+            while (cursor.moveToNext()) {
+                String key = nameIndex >= 0 ? cursor.getString(nameIndex) : null;
+                if (key == null) continue;
+                String value = valueIndex >= 0 ? cursor.getString(valueIndex) : null;
+                values.put(key, value);
             }
         } catch (Throwable t) {
             Log.w(TAG, "Unable to snapshot " + settingsType + " settings", t);
+            return null;
         } finally {
             if (cursor != null) cursor.close();
         }
@@ -229,7 +246,11 @@ public final class SettingsChangeLogger {
                                      @NonNull String event,
                                      @NonNull String source) {
         SettingsDiscoveryCatalog.record(context, settingsType, key, oldValue);
-        SettingsDiscoveryCatalog.record(context, settingsType, key, newValue);
+        // Guardian writes are generated by this app, not newly learned from
+        // Android/OEM behavior. They still belong in the JSONL audit log.
+        if (!"guardian".equals(source)) {
+            SettingsDiscoveryCatalog.record(context, settingsType, key, newValue);
+        }
         try {
             JSONObject object = new JSONObject();
             object.put("timestamp_ms", System.currentTimeMillis());

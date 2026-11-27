@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -158,18 +159,19 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
         String[] history = historyStr.isEmpty() ? new String[]{} : historyStr.split("\n");
 
         Set<String> valueSuggestions = new LinkedHashSet<>();
-        for (String historyValue : history) {
-            if (!historyValue.isEmpty()) valueSuggestions.add(historyValue);
-        }
         if (this instanceof SettingsRecyclerAdapter) {
+            // These suggestions come only from values observed in Android's settings
+            // providers, never from manually entered history shared across tables.
             String settingsType = ((SettingsRecyclerAdapter) this).getSettingsType();
             valueSuggestions.addAll(SettingsDiscoveryCatalog.getValues(context, settingsType, keyName));
+            TextInputLayout valueLayout = v.findViewById(R.id.value_input_layout);
+            valueLayout.setHelperText(context.getString(R.string.observed_values_helper));
+        } else {
+            for (String historyValue : history) {
+                if (!historyValue.isEmpty()) valueSuggestions.add(historyValue);
+            }
         }
-        ArrayAdapter<String> historyAdapter = new ArrayAdapter<>(
-                context,
-                android.R.layout.simple_dropdown_item_1line,
-                new ArrayList<>(valueSuggestions));
-        editText.setAdapter(historyAdapter);
+        editText.setAdapter(new ObservedValuesAdapter(context, new ArrayList<>(valueSuggestions)));
         editText.setThreshold(0);
         editText.setOnClickListener(clicked -> editText.showDropDown());
 
@@ -198,9 +200,10 @@ public abstract class AbsRecyclerAdapter extends RecyclerView.Adapter<AbsRecycle
                 if (editable == null) return;
                 String newValue = editable.toString();
 
-                SharedPreferences.Editor historyEditor = prefs.edit();
-                if (!historyStr.contains(newValue) && !newValue.isEmpty() && !newValue.equals("null")) {
-                    historyEditor.putString("history", newValue + "\n" + historyStr).apply();
+                if (!(this instanceof SettingsRecyclerAdapter)
+                        && !newValue.isEmpty() && !newValue.equals("null")
+                        && !java.util.Arrays.asList(history).contains(newValue)) {
+                    prefs.edit().putString("history", newValue + "\n" + historyStr).apply();
                 }
 
                 update(keyName, newValue);

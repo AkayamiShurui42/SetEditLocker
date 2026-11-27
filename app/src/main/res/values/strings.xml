@@ -18,6 +18,7 @@
     <string name="new_item">New Item</string>
     <string name="close">Close</string>
     <string name="value">Value</string>
+    <string name="observed_values_helper">Tap to select a value previously observed from Android for this setting. You can also enter a custom value.</string>
     <string name="name">Name</string>
     <string name="saved">Saved</string>
     <string name="failed">Failed</string>

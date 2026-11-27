@@ -173,23 +173,29 @@ public class SettingsMonitorService extends Service {
             super.onChange(selfChange, uri);
 
             if (uri == null) {
-                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                executor.execute(() -> {
+                    SettingsChangeLogger.scanAll(SettingsMonitorService.this);
+                    applyAllLockedSettings(false);
+                });
                 return;
             }
 
             String key = uri.getLastPathSegment();
             if (key == null || key.isEmpty() || settingsType.equals(key)) {
-                executor.execute(() -> SettingsChangeLogger.scanAll(SettingsMonitorService.this));
+                executor.execute(() -> {
+                    SettingsChangeLogger.scanAll(SettingsMonitorService.this);
+                    applyAllLockedSettings(false);
+                });
                 return;
             }
 
-            // Capture Android's new value before Guardian puts a locked value back. This is what
-            // lets Game Mode and similar OEM features teach the catalog about hidden values.
-            executor.execute(() -> SettingsChangeLogger.captureKey(
-                    SettingsMonitorService.this, settingsType, key));
-
-            // Fast enforcement path: a real observer event gets corrected after 500 ms.
-            checkAndScheduleSettingRevert(key, settingsType, tableType, true);
+            // Capture the value observed by Android BEFORE scheduling Guardian restoration.
+            // Both operations use the same executor so the write-back cannot overtake the
+            // history capture and erase a transient value from the available suggestions.
+            executor.execute(() -> {
+                SettingsChangeLogger.captureKey(SettingsMonitorService.this, settingsType, key);
+                checkAndScheduleSettingRevert(key, settingsType, tableType, true);
+            });
         }
     }
 

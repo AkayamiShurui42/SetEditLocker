@@ -1,6 +1,7 @@
 package io.github.muntashirakon.setedit.boot;
 
 import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -24,6 +25,7 @@ import io.github.muntashirakon.setedit.utils.AndroidPropertyUtils;
 import io.github.muntashirakon.setedit.utils.SettingsUtils;
 
 public final class BootUtils {
+    private static final String TAG = "BootUtils";
     private static Set<ActionItem> sActionItems;
 
     public static void add(@NonNull Context context, @NonNull ActionItem actionItem) {
@@ -51,7 +53,13 @@ public final class BootUtils {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(propertyFile)))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                 sActionItems.add(ActionItem.unflattenFromString(line));
+                try {
+                    sActionItems.add(ActionItem.unflattenFromString(line));
+                } catch (RuntimeException e) {
+                    // A single damaged saved record must not prevent other boot
+                    // actions from loading or crash the app at process startup.
+                    Log.w(TAG, "Skipping malformed saved boot action", e);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();

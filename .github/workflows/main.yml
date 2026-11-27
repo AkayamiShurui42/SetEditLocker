@@ -14,24 +14,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: gradle
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-    - name: Run local unit tests and build APK
-      run: ./gradlew testDebugUnitTest assembleDebug
+      - name: Reject committed private signing keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -Ei '[.](jks|keystore|p12|pfx|pk8)$'; then
+            echo "::error::Private signing material must never be committed."
+            exit 1
+          fi
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Build and test with Gradle
+        run: ./gradlew testDebugUnitTest assembleDebug
 
+      - name: Upload short-lived debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 5

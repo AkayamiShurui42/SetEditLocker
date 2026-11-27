@@ -1,5 +1,7 @@
 # SetEdit
 
+> **Security notice (November 27, 2026):** An exposed development signing key has been retired from every active branch. All legacy APK releases were removed, but the credential remains in older Git commits and external copies. Never install or redistribute previously downloaded debug APKs. Production signing must use a NEW private key kept outside the repository. See [SIGNING.md](SIGNING.md).
+
 The open source version of **4A Settings Database Editor**.
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"

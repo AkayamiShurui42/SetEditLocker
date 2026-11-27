@@ -2,6 +2,16 @@ import com.android.build.OutputFile
 
 apply plugin: 'com.android.application'
 
+// Release credentials must come from local environment variables or GitHub Actions
+// secrets. Never put a keystore or password into the repository.
+def releaseKeystorePath = System.getenv('SETEDIT_RELEASE_KEYSTORE_PATH')
+def releaseStorePassword = System.getenv('SETEDIT_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('SETEDIT_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('SETEDIT_RELEASE_KEY_PASSWORD')
+def releaseSigningConfigured = [
+        releaseKeystorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword
+].every { value -> value != null && !value.trim().isEmpty() }
+
 android {
     namespace "io.github.muntashirakon.setedit"
     compileSdk 34
@@ -13,6 +23,17 @@ android {
         versionCode 12
         versionName "3.3"
         resConfig "en"
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            secureRelease {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
 
     externalNativeBuild {
@@ -43,6 +64,9 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.secureRelease
+            }
         }
         debug {
             applicationIdSuffix '.debug'

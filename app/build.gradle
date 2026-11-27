@@ -15,15 +15,6 @@ android {
         resConfig "en"
     }
 
-    signingConfigs {
-        debug {
-            storeFile file('dev_keystore.jks')
-            storePassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
-            keyPassword 'kJCp!Bda#PBdN2RLK%yMK@hatq&69E'
-            keyAlias 'key0'
-        }
-    }
-
     externalNativeBuild {
         cmake {
             path "CMakeLists.txt"
@@ -55,7 +46,6 @@ android {
         }
         debug {
             applicationIdSuffix '.debug'
-            signingConfig signingConfigs.debug
         }
     }
     compileOptions {

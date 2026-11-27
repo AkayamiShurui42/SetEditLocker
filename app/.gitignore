@@ -1,2 +1,7 @@
 /build
 /release
+# Local signing artifacts
+*.jks
+*.keystore
+*.p12
+*.pfx

@@ -35,7 +35,11 @@ jobs:
           # historical release notes and tag, but remove the downloadable ZIP.
           if gh release view 1.0 --json assets --jq '.assets[].name' \
               | grep -Fxq 'app-debug.5.zip'; then
-            gh release delete-asset 1.0 app-debug.5.zip --yes
+            if [ "$(gh api "repos/$GH_REPO/releases/tags/1.0" --jq '.immutable')" = "true" ]; then
+              echo "::warning::Release 1.0 is immutable. GitHub refused removal of its old debug ZIP; escalate to GitHub Support."
+            else
+              gh release delete-asset 1.0 app-debug.5.zip --yes
+            fi
           fi
 
       - name: Remove legacy GitHub Actions debug APK artifacts

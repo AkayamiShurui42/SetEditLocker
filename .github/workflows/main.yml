@@ -26,6 +26,24 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Reject committed private signing keys
+      shell: bash
+      run: |
+        set -euo pipefail
+        if git ls-files | grep -Ei '\\.(jks|keystore|p12|pfx|pk8)
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 5
+
+; then
+          echo "::error::Private signing material must never be committed."
+          exit 1
+        fi
+
     - name: Build with Gradle
       run: ./gradlew testDebugUnitTest assembleDebug
 

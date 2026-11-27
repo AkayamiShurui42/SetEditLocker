@@ -45,12 +45,19 @@ public final class SettingsChangeLogger {
             Map<String, String> system = readTable(context, SettingsType.SYSTEM_SETTINGS);
             Map<String, String> secure = readTable(context, SettingsType.SECURE_SETTINGS);
             Map<String, String> global = readTable(context, SettingsType.GLOBAL_SETTINGS);
-            snapshots.put(SettingsType.SYSTEM_SETTINGS, system);
-            snapshots.put(SettingsType.SECURE_SETTINGS, secure);
-            snapshots.put(SettingsType.GLOBAL_SETTINGS, global);
-            recordTableInCatalog(context, SettingsType.SYSTEM_SETTINGS, system);
-            recordTableInCatalog(context, SettingsType.SECURE_SETTINGS, secure);
-            recordTableInCatalog(context, SettingsType.GLOBAL_SETTINGS, global);
+            snapshots.clear();
+            if (system != null) {
+                snapshots.put(SettingsType.SYSTEM_SETTINGS, system);
+                recordTableInCatalog(context, SettingsType.SYSTEM_SETTINGS, system);
+            }
+            if (secure != null) {
+                snapshots.put(SettingsType.SECURE_SETTINGS, secure);
+                recordTableInCatalog(context, SettingsType.SECURE_SETTINGS, secure);
+            }
+            if (global != null) {
+                snapshots.put(SettingsType.GLOBAL_SETTINGS, global);
+                recordTableInCatalog(context, SettingsType.GLOBAL_SETTINGS, global);
+            }
             initialized = true;
         }
     }
@@ -141,9 +148,18 @@ public final class SettingsChangeLogger {
     private static void scanTableLocked(@NonNull Context context,
                                         @NonNull String settingsType,
                                         @NonNull String source) {
-        Map<String, String> oldTable = snapshots.get(settingsType);
-        if (oldTable == null) oldTable = new HashMap<>();
         Map<String, String> newTable = readTable(context, settingsType);
+        if (newTable == null) {
+            // A failed provider query must never look like every key was deleted.
+            return;
+        }
+        Map<String, String> oldTable = snapshots.get(settingsType);
+        if (oldTable == null) {
+            // First readable snapshot after an earlier query failure is a baseline.
+            snapshots.put(settingsType, newTable);
+            recordTableInCatalog(context, settingsType, newTable);
+            return;
+        }
         recordTableInCatalog(context, settingsType, newTable);
 
         Set<String> keys = new HashSet<>();
@@ -176,7 +192,7 @@ public final class SettingsChangeLogger {
         }
     }
 
-    @NonNull
+    @Nullable
     private static Map<String, String> readTable(@NonNull Context context,
                                                  @NonNull String settingsType) {
         Map<String, String> values = new HashMap<>();
@@ -185,7 +201,8 @@ public final class SettingsChangeLogger {
             ContentResolver resolver = context.getContentResolver();
             cursor = resolver.query(Uri.parse("content://settings/" + settingsType),
                     new String[]{"name", "value"}, null, null, null);
-            if (cursor != null) {
+            if (cursor == null) return null;
+            {
                 int nameIndex = cursor.getColumnIndex("name");
                 int valueIndex = cursor.getColumnIndex("value");
                 while (cursor.moveToNext()) {
@@ -197,6 +214,7 @@ public final class SettingsChangeLogger {
             }
         } catch (Throwable t) {
             Log.w(TAG, "Unable to snapshot " + settingsType + " settings", t);
+            return null;
         } finally {
             if (cursor != null) cursor.close();
         }

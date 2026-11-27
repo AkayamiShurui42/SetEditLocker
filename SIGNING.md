@@ -2,7 +2,7 @@
 
 ## Security status
 
-On November 27, 2026, the development signing keystore and its password were removed from the active repository. The old key was publicly exposed and **must never be used again**. Legacy beta releases and the old Android Actions debug artifacts were retired. The original `1.0` release is marked immutable by GitHub and still carries `app-debug.5.zip`. **Do not install or redistribute this old ZIP.**
+On November 27, 2026, the development signing keystore and its password were removed from the active repository. The old key was publicly exposed and **must never be used again**. Legacy beta releases and the old Android Actions debug artifacts were retired. The historical `1.0` release was immutable at the asset level, so the entire release was retired. No published releases remain. Previously downloaded or cached debug APKs must not be installed or redistributed.
 
 The active branch is protected against accidentally checking in common keystore formats. Debug APKs are test-only, are signed with build-environment debug keys, and should not be distributed as production updates.
 
@@ -35,8 +35,8 @@ apksigner verify --verbose --print-certs app-release.apk
 
 Signing certificates determine Android update compatibility. A package previously signed by the exposed key generally **cannot** be updated in-place using the replacement key. Preserve and export app data before uninstalling anything. The debug variant currently uses the `.debug` application ID suffix, so it is not the same package ID as a production release.
 
-### Historical Git exposure and the immutable 1.0 asset
+### Historical Git exposure
 
 Deleting the file from the current branch does not erase older commits, pull request refs, forks or archived downloads. Fully rewriting the repository would change commit hashes and disrupt prior pull requests. Follow [GitHub's sensitive-data removal procedure](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository), using `git-filter-repo --sensitive-data-removal` after closing or merging open pull requests and coordinating all clones. GitHub Support must be involved to address internal PR refs and caches.
 
-The old `1.0` release is **immutable** and GitHub rejected an attempt to delete its APK asset with HTTP 422. Contact [GitHub Support](https://support.github.com/) about removing the immutable asset and outstanding GitHub-hosted cached data. Do not claim the old key is fully removed until GitHub confirms the remaining exposure has been addressed.
+The original `1.0` release required whole-release deletion because its individual asset was immutable; whole-release deletion succeeded. Contact [GitHub Support](https://support.github.com/) about outstanding GitHub-hosted cached or pull-request data after a coordinated history rewrite. Do not claim the old key is fully removed until the remaining Git history and cached exposure have been addressed.

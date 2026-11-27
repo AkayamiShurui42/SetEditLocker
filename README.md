@@ -1,6 +1,6 @@
 # SetEdit
 
-> **Security notice (November 27, 2026):** The repository's former development APK signing key was exposed and retired. Old debug-signed APKs are not trusted. All legacy beta releases have been removed, but the immutable [1.0 release](https://github.com/AkayamiShurui42/SetEditLocker/releases/tag/1.0) still offers an outdated debug ZIP that **must not be installed**. New signed production builds require a replacement private key kept outside this repository. See [SIGNING.md](SIGNING.md).
+> **Security notice (November 27, 2026):** An exposed development signing key has been retired from every active branch. All legacy APK releases were removed, but the credential remains in older Git commits and external copies. Never install or redistribute previously downloaded debug APKs. Production signing must use a NEW private key kept outside the repository. See [SIGNING.md](SIGNING.md).
 
 The open source version of **4A Settings Database Editor**.
 

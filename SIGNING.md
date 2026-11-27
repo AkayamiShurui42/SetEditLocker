@@ -18,7 +18,7 @@ Choose a new strong password when prompted. Make an offline backup of the keysto
 
 In the repository, open **Settings > Secrets and variables > Actions** and create four repository secrets:
 
-- `SETEDIT_RELEASE_KEYSTORE_B64`: the entire base64-encoded contents of the NEW JKS file, without line breaks. On Linux use `base64 -w 0 "$HOME/SetEditLocker-NEW-release.jks"`; on macOS use `base64 "$HOME/SetEditLocker-NEW-release.jks" | tr -d '\\n'`. Put the result directly into the secret field, not in a commit.
+- `SETEDIT_RELEASE_KEYSTORE_B64`: the entire base64-encoded contents of the NEW JKS file, without line breaks. On Linux use `base64 -w 0 "$HOME/SetEditLocker-NEW-release.jks"`; on macOS use `base64 "$HOME/SetEditLocker-NEW-release.jks" | awk '{printf "%s", $0}'`. Put the result directly into the secret field, not in a commit.
 - `SETEDIT_RELEASE_STORE_PASSWORD`: the keystore password.
 - `SETEDIT_RELEASE_KEY_ALIAS`: `seteditlocker-new`.
 - `SETEDIT_RELEASE_KEY_PASSWORD`: the key password (often the same as the keystore password).

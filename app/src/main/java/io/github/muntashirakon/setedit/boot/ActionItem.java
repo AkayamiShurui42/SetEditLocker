@@ -4,19 +4,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.Objects;
-import java.util.StringTokenizer;
 
 import io.github.muntashirakon.setedit.utils.ActionResult;
 
 public class ActionItem {
     @NonNull
     public static ActionItem unflattenFromString(@NonNull String str) {
-        StringTokenizer tokenizer = new StringTokenizer(str, "\t");
-        int action = Integer.parseInt(tokenizer.nextToken());
-        String table = tokenizer.nextToken();
-        String name = tokenizer.nextToken();
-        String value = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : null;
-        return new ActionItem(action, table, name, value);
+        // Keep trailing empty fields: an empty string is a valid setting value.
+        // The limit preserves any tabs within the saved value as well.
+        String[] fields = str.split("\\t", 4);
+        if (fields.length < 3) {
+            throw new IllegalArgumentException("Malformed boot action: expected action, table, and key");
+        }
+        int action = Integer.parseInt(fields[0]);
+        String value = fields.length == 4 ? fields[3] : null;
+        return new ActionItem(action, fields[1], fields[2], value);
     }
 
     @ActionResult.ActionType

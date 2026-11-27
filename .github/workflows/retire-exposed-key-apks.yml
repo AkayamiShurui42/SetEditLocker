@@ -1,0 +1,57 @@
+name: Retire exposed-key APKs (one-time cleanup)
+
+# Only runs when this temporary workflow itself is added or changed.
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/retire-exposed-key-apks.yml'
+
+jobs:
+  retire-compromised-downloads:
+    if: github.repository == 'AkayamiShurui42/SetEditLocker'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Remove historical beta releases and their tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t beta_tags < <(
+            gh release list --limit 1000 --json tagName --jq '.[].tagName' \
+              | grep -E '^v1\.0\.0-beta\.[0-9]+$' || true
+          )
+          for tag in "${beta_tags[@]}"; do
+            echo "Retiring previously published debug APK release $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          done
+
+          # The older 1.0 release also exposes a debug build archive. Retain its
+          # historical release notes and tag, but remove the downloadable ZIP.
+          if gh release view 1.0 --json assets --jq '.assets[].name' \
+              | grep -Fxq 'app-debug.5.zip'; then
+            gh release delete-asset 1.0 app-debug.5.zip --yes
+          fi
+
+      - name: Remove legacy GitHub Actions debug APK artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Artifacts from legacy runs were signed with the now-public key.
+          # Keep new artifacts produced after the signing fix.
+          mapfile -t legacy_ids < <(
+            gh api --paginate "repos/$GH_REPO/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.name == "app-debug") | select(.created_at < "2026-11-27T04:34:00Z") | .id'
+          )
+          for artifact_id in "${legacy_ids[@]}"; do
+            echo "Deleting old debug APK artifact $artifact_id"
+            gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$artifact_id"
+          done
